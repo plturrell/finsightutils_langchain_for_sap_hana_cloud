@@ -3,18 +3,23 @@
 import os
 
 import pytest
-
 from hdbcli import dbapi
-from langchain_hana import HanaDB, HanaInternalEmbeddings
+
+from langchain_hana.embeddings import HanaInternalEmbeddings
+from langchain_hana.vectorstores import HanaDB
+from tests.integration_tests.hana_test_utils import HanaTestUtils
+
 
 class ConfigData:
     def __init__(self):  # type: ignore[no-untyped-def]
         self.conn = None
         self.schema_name = ""
 
+
 test_setup = ConfigData()
 
 embedding = None
+
 
 def is_internal_embedding_available(connection, embedding) -> bool:
     """
@@ -59,8 +64,21 @@ def setup_module(module):  # type: ignore[no-untyped-def]
     embedding = HanaInternalEmbeddings(internal_embedding_model_id=embedding_model_id)
 
     if not is_internal_embedding_available(test_setup.conn, embedding):
-        pytest.fail(f"Internal embedding function is not available "
-                    f"or the model id {embedding.model_id} is wrong")
+        pytest.fail(
+            f"Internal embedding function is not available "
+            f"or the model id {embedding.model_id} is wrong"
+        )
+
+    schema_prefix = "LANGCHAIN_INT_EMB_TEST"
+    HanaTestUtils.drop_old_test_schemas(test_setup.conn, schema_prefix)
+    test_setup.schema_name = HanaTestUtils.generate_schema_name(
+        test_setup.conn, schema_prefix
+    )
+    HanaTestUtils.create_and_set_schema(test_setup.conn, test_setup.schema_name)
+
+
+def teardown_module(module):  # type: ignore[no-untyped-def]
+    HanaTestUtils.drop_schema_if_exists(test_setup.conn, test_setup.schema_name)
 
 
 @pytest.fixture
@@ -79,20 +97,8 @@ def metadatas() -> list[str]:
     ]
 
 
-def drop_table(connection, table_name):
-    try:
-        cur = connection.cursor()
-        cur.execute(f"DROP TABLE {table_name}")
-    except dbapi.ProgrammingError:
-        pass
-    finally:
-        cur.close()
-
-
-def test_hanavector_add_texts(texts: list[str], metadatas:list[dict]) -> None:
+def test_hanavector_add_texts(texts: list[str], metadatas: list[dict]) -> None:
     table_name = "TEST_TABLE_ADD_TEXTS"
-    # Delete table if it exists
-    drop_table(test_setup.conn, table_name)
 
     # Check if table is created
     vectordb = HanaDB(
@@ -112,17 +118,11 @@ def test_hanavector_add_texts(texts: list[str], metadatas:list[dict]) -> None:
         number_of_rows = rows[0][0]
     assert number_of_rows == number_of_texts
 
-    drop_table(test_setup.conn, table_name)
-
-
-
 
 def test_hanavector_similarity_search_with_metadata_filter(
     texts: list[str], metadatas: list[dict]
 ) -> None:
     table_name = "TEST_TABLE_FILTER"
-    # Delete table if it exists
-    drop_table(test_setup.conn, table_name)
 
     # Check if table is created
     vectorDB = HanaDB.from_texts(
@@ -153,14 +153,9 @@ def test_hanavector_similarity_search_with_metadata_filter(
     assert metadatas[1]["start"] == search_result[0].metadata["start"]
     assert metadatas[1]["end"] == search_result[0].metadata["end"]
 
-    drop_table(test_setup.conn, table_name)
-
-
 
 def test_hanavector_max_marginal_relevance_search(texts: list[str]) -> None:
     table_name = "TEST_TABLE_MAX_RELEVANCE"
-    # Delete table if it exists
-    drop_table(test_setup.conn, table_name)
 
     # Check if table is created
     vectorDB = HanaDB.from_texts(
@@ -175,5 +170,3 @@ def test_hanavector_max_marginal_relevance_search(texts: list[str]) -> None:
     assert len(search_result) == 2
     assert search_result[0].page_content == texts[0]
     assert search_result[1].page_content != texts[0]
-
-    drop_table(test_setup.conn, table_name)

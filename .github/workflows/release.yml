@@ -130,64 +130,64 @@ jobs:
         run: |
           poetry run python $GITHUB_WORKSPACE/.github/scripts/check_prerelease_dependencies.py pyproject.toml
 
-#      - name: Import integration test dependencies
-#        run: poetry install --with test,test_integration
-#
-#      - name: Run integration tests
-#        env:
-#          HANA_DB_ADDRESS: ${{ secrets.HANA_DB_ADDRESS }}
-#          HANA_DB_PORT: ${{ secrets.HANA_DB_PORT }}
-#          HANA_DB_USER: ${{ secrets.HANA_DB_USER }}
-#          HANA_DB_PASSWORD: ${{ secrets.HANA_DB_PASSWORD }}
-#          HANA_DB_EMBEDDING_MODEL_ID: ${{ secrets.HANA_DB_EMBEDDING_MODEL_ID }}
-#        run: make integration_tests
+      - name: Import integration test dependencies
+        run: poetry install --with test,test_integration
 
-#  publish:
-#    needs:
-#      - build
-#      - pre-release-checks
-#    runs-on: ubuntu-latest
-#    environment: release
-#    permissions:
-#      # This permission is used for trusted publishing:
-#      # https://blog.pypi.org/posts/2023-04-20-introducing-trusted-publishers/
-#      #
-#      # Trusted publishing has to also be configured on PyPI for each package:
-#      # https://docs.pypi.org/trusted-publishers/adding-a-publisher/
-#      id-token: write
-#      contents: read
-#
-#    steps:
-#      - uses: actions/checkout@v4
-#        with:
-#          ref: main
-#
-#      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
-#        uses: "./.github/actions/poetry_setup"
-#        with:
-#          python-version: ${{ env.PYTHON_VERSION }}
-#          poetry-version: ${{ env.POETRY_VERSION }}
-#          cache-key: release
-#
-#      - uses: actions/download-artifact@v4
-#        with:
-#          name: dist
-#          path: ./dist/
-#
-#      - name: Publish package distributions to PyPI
-#        uses: pypa/gh-action-pypi-publish@release/v1
-#        with:
-#          packages-dir: ./dist/
-#          verbose: true
-#          print-hash: true
-#          # Temp workaround since attestations are on by default as of gh-action-pypi-publish v1.11.0
-#          attestations: false
+      - name: Run integration tests
+        env:
+          HANA_DB_ADDRESS: ${{ secrets.HANA_DB_ADDRESS }}
+          HANA_DB_PORT: ${{ secrets.HANA_DB_PORT }}
+          HANA_DB_USER: ${{ secrets.HANA_DB_USER }}
+          HANA_DB_PASSWORD: ${{ secrets.HANA_DB_PASSWORD }}
+          HANA_DB_EMBEDDING_MODEL_ID: ${{ secrets.HANA_DB_EMBEDDING_MODEL_ID }}
+        run: make integration_tests
+
+  publish:
+    needs:
+      - build
+      - pre-release-checks
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      # This permission is used for trusted publishing:
+      # https://blog.pypi.org/posts/2023-04-20-introducing-trusted-publishers/
+      #
+      # Trusted publishing has to also be configured on PyPI for each package:
+      # https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: ./dist/
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ./dist/
+          verbose: true
+          print-hash: true
+          # Temp workaround since attestations are on by default as of gh-action-pypi-publish v1.11.0
+          attestations: false
 
   mark-release:
     needs:
       - build
       - pre-release-checks
-#      - publish
+      - publish
     runs-on: ubuntu-latest
     permissions:
       # This permission is needed by `ncipollo/release-action` to
