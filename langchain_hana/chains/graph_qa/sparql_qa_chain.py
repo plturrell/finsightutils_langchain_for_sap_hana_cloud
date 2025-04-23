@@ -11,7 +11,8 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts.base import BasePromptTemplate
 from pydantic import Field
 
-from langchain_hana import HanaRdfGraph
+from langchain_hana.graphs import HanaRdfGraph
+
 from .prompts import (
     SPARQL_GENERATION_SELECT_PROMPT,
     SPARQL_QA_PROMPT,
@@ -111,11 +112,39 @@ class HanaSparqlQAChain(Chain):
             query = query[8:-9]
         return query
 
+    def _ensure_common_prefixes(self, query: str) -> str:
+        """
+        Ensure common prefixes (rdf, rdfs, owl, xsd) are declared if used in the query.
+        """
+        common = {
+            "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+            "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+            "owl": "http://www.w3.org/2002/07/owl#",
+            "xsd": "http://www.w3.org/2001/XMLSchema#",
+        }
+        # detect existing prefix declarations
+        present = set()
+        for line in query.splitlines():
+            line_strip = line.strip()
+            if line_strip.upper().startswith("PREFIX "):
+                parts = line_strip.split()
+                if len(parts) >= 2 and parts[1].endswith(":"):
+                    present.add(parts[1][:-1])
+        # build missing declarations
+        missing = [(p, uri) for p, uri in common.items() if p not in present]
+        if missing:
+            prefix_lines = ""
+            for p, uri in missing:
+                if p in query:
+                    prefix_lines += f"PREFIX {p}: <{uri}>\n"
+            query = prefix_lines + query
+        return query
+
     def _call(
         self,
         inputs: Dict[str, Any],
         run_manager: Optional[CallbackManagerForChainRun] = None,
-        is_insert = False,
+        is_insert=False,
     ) -> Dict[str, str]:
         "Generate SPARQL query, use it to look up in the graph and answer the question."
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
@@ -140,7 +169,8 @@ class HanaSparqlQAChain(Chain):
         # Extract the SPARQL code from the generated text and inject the from clause
         generated_sparql = self.extract_sparql(generated_sparql)
         generated_sparql = self.graph.inject_from_clause(generated_sparql)
-        _run_manager.on_text("Final SPARQL (with FROM clause injected):", end="\n", verbose=self.verbose)
+        generated_sparql = self._ensure_common_prefixes(generated_sparql)
+        _run_manager.on_text("Final SPARQL:", end="\n", verbose=self.verbose)
         _run_manager.on_text(
             generated_sparql, color="yellow", end="\n", verbose=self.verbose
         )

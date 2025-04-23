@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import csv
 import io
+import os
+import re
 from typing import Optional
+
 import rdflib
 from hdbcli import dbapi
-import re
+from rdflib.plugins.sparql import prepareQuery
 
 
 class HanaRdfGraph:
@@ -13,32 +16,47 @@ class HanaRdfGraph:
     SAP HANA CLOUD Knowledge Graph Engine Wrapper
 
     This class connects to a SAP HANA Graph SPARQL endpoint, executes queries,
-    and loads ontology schema data via a SELECT query.
+    and loads or generates ontology/schema data via one of four methods:
+
+    1. ontology_query: Provide a SPARQL CONSTRUCT query to extract the schema
+       directly from the graph.
+    2. ontology_uri: Specify a remote ontology graph URI; the schema is loaded
+       via a default CONSTRUCT that copies all triples.
+    3. ontology_local_file: Load the schema from a local RDF file (e.g., Turtle,
+       RDF/XML) on disk.
+    4. auto_extract_ontology: When enabled (and no other source given), run a
+       built-in generic CONSTRUCT query that reverse-engineers classes, properties,
+       domains, and ranges from your instance data.
 
     Args:
-        connection (dbapi.Connection): A HANA database connection object obtained from hdbcli.dbapi.
-        ontology_uri (str): The URI of the ontology containing the RDF schema.
-        graph_uri (Optional[str]): The URI of the target graph. If None is provided, the default graph is used.
+        connection (dbapi.Connection): A HANA database connection instance.
+        ontology_query (Optional[str]): A SPARQL CONSTRUCT query to load the schema.
+        ontology_uri (Optional[str]): The URI of the ontology graph 
+            containing the RDF schema.
+        ontology_local_file (Optional[str]): Path to a local ontology file to load.
+        ontology_local_file_format (Optional[str]): RDF format of the local file
+            (e.g., 'turtle').
+        graph_uri (Optional[str]): The URI of the target graph; uses 'DEFAULT' if None.
+        auto_extract_ontology (bool): If True and no schema source provided,
+            automatically extract a generic ontology via SPARQL.
 
     Example:
         from hdbcli import dbapi
-        # Establish a database connection (customize connection parameters as needed)
+        # Establish a database connection
         connection = dbapi.connect(
             address="<hostname>",
-            port=3<NN>MM,
+            port=30015,
             user="<username>",
             password="<password>"
         )
-        ontology_uri = "http://example.com/ontology"
-        graph_uri = "http://example.com/graph"  # Use None to select the default graph
         rdf_graph = HanaRdfGraph(
             connection=connection,
-            ontology_uri=ontology_uri,
-            graph_uri=graph_uri
+            graph_uri="http://example.com/graph",
+            ontology_uri="http://example.com/ontology"
         )
-        # To execute a SPARQL query:
+        # Execute a SPARQL query:
         sparql_query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }"
-        response = rdf_graph.query(sparql_query, add_from_clause=True)
+        response = rdf_graph.query(sparql_query, inject_from_clause=True)
         print(response)
 
     *Security note*: Make sure that the database connection uses credentials
@@ -56,15 +74,24 @@ class HanaRdfGraph:
     def __init__(
         self,
         connection: dbapi.Connection,
-        ontology_uri: str,
         graph_uri: Optional[str],  # use default graph if None was provided as graph_uri
+        ontology_query: Optional[str] = None,
+        ontology_uri: Optional[str] = None,
+        ontology_local_file: Optional[str] = None,
+        ontology_local_file_format: Optional[str] = None,
+        auto_extract_ontology: bool = False,
     ) -> None:
         self.connection = connection
-        self.ontology_uri = ontology_uri
-        self.graph_uri = graph_uri
+        self.graph_uri = graph_uri if graph_uri else "DEFAULT"
 
-        ontology_schema_graph = self._load_ontology_schema_graph()
-        self.schema = ontology_schema_graph.serialize(format="turtle")
+        self._check_connectivity()
+        self.refresh_schema(
+            ontology_query,
+            ontology_uri,
+            ontology_local_file,
+            ontology_local_file_format,
+            auto_extract_ontology,
+        )
 
     def inject_from_clause(self, query: str) -> str:
         """
@@ -83,24 +110,24 @@ class HanaRdfGraph:
             ValueError: If the query does not contain a 'WHERE' clause.
         """
         # Determine the appropriate FROM clause.
-        if self.graph_uri is None:
+        if self.graph_uri is None or self.graph_uri.upper() == "DEFAULT":
             from_clause = "FROM DEFAULT"
         else:
             from_clause = f"FROM <{self.graph_uri}>"
 
         # Check if a FROM clause is already present.
-        from_pattern = re.compile(r'\bFROM\b', flags=re.IGNORECASE)
+        from_pattern = re.compile(r"\bFROM\b", flags=re.IGNORECASE)
         if from_pattern.search(query):
             # FROM clause already exists, return query unchanged.
             return query
 
-        # Use regex to match the first occurrence of 'WHERE' with word boundaries, case-insensitive.
-        pattern = re.compile(r'\bWHERE\b', flags=re.IGNORECASE)
+        # Use regex to match the first occurrence of 'WHERE' with word boundaries
+        pattern = re.compile(r"\bWHERE\b", flags=re.IGNORECASE)
         match = pattern.search(query)
         if match:
             index = match.start()
             # Insert the FROM clause before the matched WHERE clause.
-            query = query[:index] + f'\n{from_clause}\n' + query[index:]
+            query = query[:index] + f"\n{from_clause}\n" + query[index:]
         else:
             raise ValueError("The SPARQL query does not contain a 'WHERE' clause.")
 
@@ -110,11 +137,9 @@ class HanaRdfGraph:
         self,
         query: str,
         content_type: Optional[str] = None,
-        inject_from_clause: bool = True,  # If True , inject a FROM clause into the query.
+        inject_from_clause: bool = True,  # If True , inject a FROM clause into query.
     ) -> str:
         """Executes SPARQL query and returns response as a string."""
-
-        self._validate_sparql_query(query)
 
         if content_type is None:
             content_type = "application/sparql-results+csv"
@@ -143,65 +168,38 @@ class HanaRdfGraph:
 
         return response
 
-    def _load_ontology_schema_graph(self) -> rdflib.Graph:
+    def _check_connectivity(self) -> None:
         """
-        Execute the query for collecting the ontology schema statements
-        and store as rdblib.Graph
+        Executes a simple `ASK` query to check connectivity
         """
-        ontology_query = (
-            f"SELECT   ?s ?o ?p FROM <{self.ontology_uri}> WHERE" + "{?s ?o ?p .}"
+        from_clause = (
+            f" FROM <{self.graph_uri}> " if self.graph_uri != "DEFAULT" else ""
         )
-        response = self.query(ontology_query, inject_from_clause=False)
-        ontology_triples = self.convert_csv_response_to_list(response)
+        response = self.query(
+            f"ASK {from_clause} {{ ?s ?p ?o }}", inject_from_clause=False
+        )
+        if response == "false":
+            raise ValueError(f"There is no named graph with '{self.graph_uri}'")
+
+    def _load_ontology_schema_graph_from_query(self, ontology_query) -> rdflib.Graph:
+        """
+        Load an ontology schema by executing a SPARQL CONSTRUCT query.
+        """
+        self._validate_construct_query(ontology_query)
+
+        response = self.query(ontology_query, content_type="", inject_from_clause=False)
 
         graph = rdflib.Graph()
 
-        for s_raw, p_raw, o_raw in ontology_triples:
-            # Subject could be URI or bnode (blank node)
-            if s_raw.startswith("http"):
-                subject = rdflib.URIRef(s_raw)
-            elif s_raw.startswith("_:"):
-                subject = rdflib.BNode(s_raw)
-            else:
-                subject = None
-
-            # Predicate (usually a URI)
-            if p_raw.startswith("http"):
-                predicate = rdflib.URIRef(p_raw)
-            else:
-                predicate = None
-
-            # Object could be a URI, bnode, or literal
-            if o_raw.startswith("http"):
-                obj = rdflib.URIRef(o_raw)
-            elif o_raw.startswith("_:"):
-                obj = rdflib.BNode(o_raw)
-            else:
-                obj = rdflib.Literal(o_raw)
-
-            # Validate RDF triple rules
-            if subject is None:
-                raise ValueError(f"Invalid RDF: Subject cannot be a literal ({s_raw})")
-            if predicate is None:
-                raise ValueError(f"Invalid RDF: Predicate must be a URI, not a blank node or literal ({p_raw})")
-
-            graph.add((subject, predicate, obj))
+        # Parse the string into the graph
+        graph.parse(data=response, format="turtle")
 
         return graph
 
     @staticmethod
-    def _validate_sparql_query(query: str) -> None:
-        """Validate the generated SPARQL query structure."""
-        required_keywords = ["SELECT", "WHERE"]
-        if not all(keyword in query.upper() for keyword in required_keywords):
-            raise ValueError(
-                f"SPARQL query is invalid. "
-                f"The query must contains the following keywords: {required_keywords}."
-                f"Only SELECT queries are supported now!"
-            )
-
-    @staticmethod
-    def convert_csv_response_to_list(csv_string: str, header: bool = False) -> list[list[str]]:
+    def convert_csv_response_to_list(
+        csv_string: str, header: bool = False
+    ) -> list[list[str]]:
         """Convert CSV string response to a list of lists."""
         with io.StringIO(csv_string) as csv_file:
             reader = csv.reader(csv_file)
@@ -211,6 +209,7 @@ class HanaRdfGraph:
 
     @staticmethod
     def convert_csv_response_to_dataframe(result):  # type: ignore[no-untyped-def]
+        """Convert a CSV SPARQL response into a pandas DataFrame."""
         try:
             import pandas as pd
         except ImportError:
@@ -222,10 +221,166 @@ class HanaRdfGraph:
         result_df = pd.read_csv(io.StringIO(result))
         return result_df.fillna("")
 
-    def refresh_schema(self) -> None:
-        """Reload and update the ontology schema."""
-        ontology_schema_graph = self._load_ontology_schema_graph()
+    @staticmethod
+    def _load_ontology_schema_from_file(local_file: str, local_file_format: str = None):  # type: ignore[no-untyped-def, assignment]
+        """
+        Parse the ontology schema statements from the provided file
+        """
+        if not os.path.exists(local_file):
+            raise FileNotFoundError(f"File {local_file} does not exist.")
+        if not os.access(local_file, os.R_OK):
+            raise PermissionError(f"Read permission for {local_file} is restricted")
+        graph = rdflib.Graph()
+        try:
+            graph.parse(local_file, format=local_file_format)
+        except Exception as e:
+            raise ValueError(f"Invalid file format for {local_file} : ", e)
+        return graph
+
+    def refresh_schema(
+        self,
+        ontology_query: Optional[str] = None,
+        ontology_uri: Optional[str] = None,
+        ontology_local_file: Optional[str] = None,
+        ontology_local_file_format: Optional[str] = None,
+        auto_extract_ontology: bool = False,
+    ) -> None:
+        """
+        Load or generate the graph's ontology schema.
+
+        Args:
+            ontology_query: SPARQL CONSTRUCT to load schema.
+            ontology_uri: URI of schema graph to load.
+            ontology_local_file: Local file path for schema.
+            ontology_local_file_format: Format of local file.
+            auto_extract_ontology: If True and no other source, use generic extractor.
+
+        Raises:
+            ValueError: If multiple or no schema sources are specified.
+        """
+        # Count provided schema sources
+        schema_sources = sum(
+            1
+            for source in [ontology_query, ontology_uri, ontology_local_file]
+            if source is not None
+        )
+
+        if schema_sources == 0 and auto_extract_ontology:
+            ontology_query = HanaRdfGraph.get_generic_ontology_query(self.graph_uri)
+            schema_sources = 1
+
+        if schema_sources > 1:
+            raise ValueError(
+                "Multiple ontology/schema sources provided. Use only one of: "
+                "ontology_query, ontology_uri, or ontology_local_file."
+            )
+        elif schema_sources == 0:
+            raise ValueError(
+                "No ontology/schema sources provided. Use only one of: "
+                "ontology_query, ontology_uri, or ontology_local_file."
+            )
+
+        if ontology_local_file:
+            ontology_schema_graph = self._load_ontology_schema_from_file(
+                ontology_local_file,
+                ontology_local_file_format,  # type: ignore[arg-type]
+            )
+        else:
+            if ontology_uri:
+                ontology_query = (
+                    f"CONSTRUCT {{?s ?o ?p}} FROM <{ontology_uri}> WHERE"
+                    + "{?s ?o ?p .}"
+                )
+            ontology_schema_graph = self._load_ontology_schema_graph_from_query(
+                ontology_query
+            )
+
         self.schema = ontology_schema_graph.serialize(format="turtle")
+
+    @staticmethod
+    def _validate_construct_query(construct_query: str) -> None:
+        """
+        Validate the query is a valid SPARQL CONSTRUCT query.
+
+        Args:
+            construct_query: The SPARQL query string to validate.
+
+        Raises:
+            TypeError: If query is not a string.
+            ValueError: If query is not a valid CONSTRUCT query.
+        """
+        if not isinstance(construct_query, str):
+            raise TypeError("Schema query must be provided as string.")
+
+        parsed_query = prepareQuery(construct_query)
+        if parsed_query.algebra.name != "ConstructQuery":
+            raise ValueError(
+                "Invalid query type. Only CONSTRUCT queries are supported for schema."
+            )
+
+    @staticmethod
+    def get_generic_ontology_query(graph_uri):
+        """
+        Return a generic SPARQL CONSTRUCT that extracts
+            a minimal OWL schema from the graph.
+
+        Args:
+            graph_uri: URI of the named graph to query.
+
+        Returns:
+            A SPARQL CONSTRUCT query string.
+        """
+        ontology_query = f"""
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl:  <http://www.w3.org/2002/07/owl#>
+
+        CONSTRUCT {{
+          ?C   rdf:type   owl:Class ;
+               rdfs:label ?clabel .
+
+          ?P1  rdf:type       owl:ObjectProperty ;
+               rdfs:domain    ?dom1 ;
+               rdfs:range     ?rng1 ;
+               rdfs:label     ?plab1 .
+
+          ?P2  rdf:type       owl:DatatypeProperty ;
+               rdfs:domain    ?dom2 ;
+               rdfs:range     ?rng2 ;
+               rdfs:label     ?plab2 .
+        }} FROM <{graph_uri}>
+        WHERE {{
+          {{
+            SELECT DISTINCT ?C ?clabel WHERE {{
+              ?s rdf:type ?C .
+              OPTIONAL {{ ?C rdfs:label ?clabel }}
+            }}
+          }}
+
+          UNION
+          {{
+            SELECT DISTINCT ?P1 ?dom1 ?rng1 ?plab1 WHERE {{
+              ?s  ?P1 ?o1 .
+              FILTER (!isLiteral(?o1)) .
+              ?s  rdf:type   ?dom1 .
+              ?o1 rdf:type   ?rng1 .
+              OPTIONAL {{ ?P1 rdfs:label ?plab1 }}
+            }}
+          }}
+
+          UNION
+          {{
+            SELECT DISTINCT ?P2 ?dom2 ?rng2 ?plab2 WHERE {{
+              ?s  ?P2 ?o2 .
+              FILTER ( isLiteral(?o2) ) .
+              ?s  rdf:type       ?dom2 .
+              BIND(datatype(?o2) AS ?rng2) .
+              FILTER( !STRSTARTS(str(?P2), "http://www.w3.org/") ) .
+              OPTIONAL {{ ?P2 rdfs:label ?plab2 }}
+            }}
+          }}
+        }}"""
+        return ontology_query
 
     @property
     def get_schema(self) -> str:
