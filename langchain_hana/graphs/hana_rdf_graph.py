@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import csv
-import io
 import os
 import re
 from typing import Optional
@@ -31,7 +29,7 @@ class HanaRdfGraph:
     Args:
         connection (dbapi.Connection): A HANA database connection instance.
         ontology_query (Optional[str]): A SPARQL CONSTRUCT query to load the schema.
-        ontology_uri (Optional[str]): The URI of the ontology graph 
+        ontology_uri (Optional[str]): The URI of the ontology graph
             containing the RDF schema.
         ontology_local_file (Optional[str]): Path to a local ontology file to load.
         ontology_local_file_format (Optional[str]): RDF format of the local file
@@ -195,31 +193,6 @@ class HanaRdfGraph:
         graph.parse(data=response, format="turtle")
 
         return graph
-
-    @staticmethod
-    def convert_csv_response_to_list(
-        csv_string: str, header: bool = False
-    ) -> list[list[str]]:
-        """Convert CSV string response to a list of lists."""
-        with io.StringIO(csv_string) as csv_file:
-            reader = csv.reader(csv_file)
-            if not header:
-                next(reader, None)
-            return [row for row in reader]
-
-    @staticmethod
-    def convert_csv_response_to_dataframe(result):  # type: ignore[no-untyped-def]
-        """Convert a CSV SPARQL response into a pandas DataFrame."""
-        try:
-            import pandas as pd
-        except ImportError:
-            raise ImportError(
-                "The 'pandas' library is required for this function. "
-                "Please install it using 'pip install pandas'."
-            )
-
-        result_df = pd.read_csv(io.StringIO(result))
-        return result_df.fillna("")
 
     @staticmethod
     def _load_ontology_schema_from_file(local_file: str, local_file_format: str = None):  # type: ignore[no-untyped-def, assignment]
