@@ -85,7 +85,6 @@ def teardown_module(module):  # type: ignore[no-untyped-def]
     HanaTestUtils.drop_schema_if_exists(test_setup.conn, test_setup.schema_name)
 
 
-
 @pytest.fixture
 def texts() -> List[str]:
     return ["foo", "bar", "baz", "bak", "cat"]
@@ -870,14 +869,9 @@ def test_hanavector_enhanced_filter_1() -> None:
     vectorDB.add_documents(DOCUMENTS)
 
 
-@pytest.mark.parametrize("test_filter, expected_ids", TYPE_1_FILTERING_TEST_CASES)
-@pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
-def test_pgvector_with_with_metadata_filters_1(
-    test_filter: Dict[str, Any],
-    expected_ids: List[int],
-) -> None:
-    table_name = "TEST_TABLE_ENHANCED_FILTER_1"
-
+def _impl_test_hanavector_with_with_metadata_filters(
+    test_filter: Dict[str, Any], expected_ids: List[int], table_name: str
+):
     vectorDB = HanaDB(
         connection=test_setup.conn,
         embedding=embedding,
@@ -893,128 +887,72 @@ def test_pgvector_with_with_metadata_filters_1(
     ids = [doc.metadata["id"] for doc in docs]
     assert len(ids) == len(expected_ids), test_filter
     assert set(ids).issubset(expected_ids), test_filter
+
+
+@pytest.mark.parametrize("test_filter, expected_ids", TYPE_1_FILTERING_TEST_CASES)
+@pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
+def test_hanavector_with_with_metadata_filters_1(
+    test_filter: Dict[str, Any],
+    expected_ids: List[int],
+) -> None:
+    _impl_test_hanavector_with_with_metadata_filters(
+        test_filter, expected_ids, "TEST_TABLE_ENHANCED_FILTER_1"
+    )
 
 
 @pytest.mark.parametrize("test_filter, expected_ids", TYPE_2_FILTERING_TEST_CASES)
 @pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
-def test_pgvector_with_with_metadata_filters_2(
+def test_hanavector_with_with_metadata_filters_2(
     test_filter: Dict[str, Any],
     expected_ids: List[int],
 ) -> None:
-    table_name = "TEST_TABLE_ENHANCED_FILTER_2"
-
-    vectorDB = HanaDB(
-        connection=test_setup.conn,
-        embedding=embedding,
-        table_name=table_name,
+    _impl_test_hanavector_with_with_metadata_filters(
+        test_filter, expected_ids, "TEST_TABLE_ENHANCED_FILTER_2"
     )
-
-    # Delete already existing documents from the table
-    vectorDB.delete(filter={})
-
-    vectorDB.add_documents(DOCUMENTS)
-
-    docs = vectorDB.similarity_search("meow", k=5, filter=test_filter)
-    ids = [doc.metadata["id"] for doc in docs]
-    assert len(ids) == len(expected_ids), test_filter
-    assert set(ids).issubset(expected_ids), test_filter
 
 
 @pytest.mark.parametrize("test_filter, expected_ids", TYPE_3_FILTERING_TEST_CASES)
 @pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
-def test_pgvector_with_with_metadata_filters_3(
+def test_hanavector_with_with_metadata_filters_3(
     test_filter: Dict[str, Any],
     expected_ids: List[int],
 ) -> None:
-    table_name = "TEST_TABLE_ENHANCED_FILTER_3"
-
-    vectorDB = HanaDB(
-        connection=test_setup.conn,
-        embedding=embedding,
-        table_name=table_name,
+    _impl_test_hanavector_with_with_metadata_filters(
+        test_filter, expected_ids, "TEST_TABLE_ENHANCED_FILTER_3"
     )
-
-    # Delete already existing documents from the table
-    vectorDB.delete(filter={})
-
-    vectorDB.add_documents(DOCUMENTS)
-
-    docs = vectorDB.similarity_search("meow", k=5, filter=test_filter)
-    ids = [doc.metadata["id"] for doc in docs]
-    assert len(ids) == len(expected_ids), test_filter
-    assert set(ids).issubset(expected_ids), test_filter
 
 
 @pytest.mark.parametrize("test_filter, expected_ids", TYPE_4_FILTERING_TEST_CASES)
 @pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
-def test_pgvector_with_with_metadata_filters_4(
+def test_hanavector_with_with_metadata_filters_4(
     test_filter: Dict[str, Any],
     expected_ids: List[int],
 ) -> None:
-    table_name = "TEST_TABLE_ENHANCED_FILTER_4"
-
-    vectorDB = HanaDB(
-        connection=test_setup.conn,
-        embedding=embedding,
-        table_name=table_name,
+    _impl_test_hanavector_with_with_metadata_filters(
+        test_filter, expected_ids, "TEST_TABLE_ENHANCED_FILTER_4"
     )
-
-    # Delete already existing documents from the table
-    vectorDB.delete(filter={})
-
-    vectorDB.add_documents(DOCUMENTS)
-
-    docs = vectorDB.similarity_search("meow", k=5, filter=test_filter)
-    ids = [doc.metadata["id"] for doc in docs]
-    assert len(ids) == len(expected_ids), test_filter
-    assert set(ids).issubset(expected_ids), test_filter
 
 
 @pytest.mark.parametrize("test_filter, expected_ids", TYPE_4B_FILTERING_TEST_CASES)
 @pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
-def test_pgvector_with_with_metadata_filters_4b(
+def test_hanavector_with_with_metadata_filters_4b(
     test_filter: Dict[str, Any],
     expected_ids: List[int],
 ) -> None:
-    table_name = "TEST_TABLE_ENHANCED_FILTER_4B"
-
-    vectorDB = HanaDB(
-        connection=test_setup.conn,
-        embedding=embedding,
-        table_name=table_name,
+    _impl_test_hanavector_with_with_metadata_filters(
+        test_filter, expected_ids, "TEST_TABLE_ENHANCED_FILTER_4B"
     )
-
-    vectorDB.add_documents(DOCUMENTS)
-
-    docs = vectorDB.similarity_search("meow", k=5, filter=test_filter)
-    ids = [doc.metadata["id"] for doc in docs]
-    assert len(ids) == len(expected_ids), test_filter
-    assert set(ids).issubset(expected_ids), test_filter
 
 
 @pytest.mark.parametrize("test_filter, expected_ids", TYPE_5_FILTERING_TEST_CASES)
 @pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
-def test_pgvector_with_with_metadata_filters_5(
+def test_hanavector_with_with_metadata_filters_5(
     test_filter: Dict[str, Any],
     expected_ids: List[int],
 ) -> None:
-    table_name = "TEST_TABLE_ENHANCED_FILTER_5"
-
-    vectorDB = HanaDB(
-        connection=test_setup.conn,
-        embedding=embedding,
-        table_name=table_name,
+    _impl_test_hanavector_with_with_metadata_filters(
+        test_filter, expected_ids, "TEST_TABLE_ENHANCED_FILTER_5"
     )
-
-    # Delete already existing documents from the table
-    vectorDB.delete(filter={})
-
-    vectorDB.add_documents(DOCUMENTS)
-
-    docs = vectorDB.similarity_search("meow", k=5, filter=test_filter)
-    ids = [doc.metadata["id"] for doc in docs]
-    assert len(ids) == len(expected_ids), test_filter
-    assert set(ids).issubset(expected_ids), test_filter
 
 
 @pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
