@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import struct
 from typing import (
@@ -24,6 +25,8 @@ from langchain_core.vectorstores.utils import maximal_marginal_relevance
 
 from langchain_hana.embeddings import HanaInternalEmbeddings
 from langchain_hana.utils import DistanceStrategy
+
+logger = logging.getLogger(__name__)
 
 HANA_DISTANCE_FUNCTION: dict = {
     DistanceStrategy.COSINE: ("COSINE_SIMILARITY", "DESC"),
@@ -51,6 +54,16 @@ BETWEEN_OPERATOR = "$between"
 LIKE_OPERATOR = "$like"
 
 CONTAINS_OPERATOR = "$contains"
+
+COLUMN_OPERATORS = {
+    **COMPARISONS_TO_SQL,
+    **IN_OPERATORS_TO_SQL,
+    BETWEEN_OPERATOR: "BETWEEN",
+    LIKE_OPERATOR: "LIKE",
+    CONTAINS_OPERATOR: lambda: (_ for _ in ()).throw(
+        RuntimeError(f"{CONTAINS_OPERATOR} needs special SQL syntax")
+    ),
+}
 
 LOGICAL_OPERATORS_TO_SQL = {"$and": "AND", "$or": "OR"}
 
@@ -226,7 +239,7 @@ class HanaDB(VectorStore):
         Ping the database to check if the in-database embedding function
             exists and works.
         Raises:
-            RuntimeError: If the embedding function does not exist or fails.
+            ValueError: If the embedding function does not exist or fails.
         """
         if self.internal_embedding_model_id is None:
             raise ValueError("Internal embedding model id can't be none!")
@@ -857,16 +870,10 @@ class HanaDB(VectorStore):
             metadata_projection = self._create_metadata_projection(
                 projected_metadata_columns
             )
-
-        from_clause = (
-            INTERMEDIATE_TABLE_NAME if metadata_projection else f'"{self.table_name}"'
-        )
-
-        order_str = f" order by CS {HANA_DISTANCE_FUNCTION[self.distance_strategy][1]}"
-        where_str, query_tuple = self._create_where_by_filter(filter)
-
-        if vector_embedding_params:
-            query_tuple = vector_embedding_params + list(query_tuple)
+        if metadata_projection:
+            from_clause = INTERMEDIATE_TABLE_NAME
+        else:
+            from_clause = f'"{self.table_name}"'
 
         sql_str = (
             f"{metadata_projection} "
@@ -878,11 +885,21 @@ class HanaDB(VectorStore):
             f"  {embedding_expr}) AS CS "  # row[3]
             f"FROM {from_clause}"
         )
-        sql_str = sql_str + where_str
-        sql_str = sql_str + order_str
+        parameters = []
+        if vector_embedding_params:
+            parameters += vector_embedding_params
+        where_clause, where_parameters = self.create_where_clause(filter)
+        if where_clause:
+            sql_str += f" {where_clause}"
+            parameters += where_parameters
+        sql_str += f" order by CS {HANA_DISTANCE_FUNCTION[self.distance_strategy][1]}"
+
         try:
             cur = self.connection.cursor()
-            cur.execute(sql_str, query_tuple)
+            if parameters:
+                cur.execute(sql_str, parameters)
+            else:
+                cur.execute(sql_str)
             if cur.has_result_set():
                 rows = cur.fetchall()
                 for row in rows:
@@ -890,6 +907,10 @@ class HanaDB(VectorStore):
                     doc = Document(page_content=row[0], metadata=js)
                     result_vector = self._deserialize_binary_format(row[2])
                     result.append((doc, row[3], result_vector))
+        except dbapi.Error:
+            logger.error(f"SQL Statement: {sql_str}")
+            logger.error(f"Parameters: {parameters}")
+            raise
         finally:
             cur.close()
         return result
@@ -993,118 +1014,160 @@ class HanaDB(VectorStore):
         ]
         return [doc for doc, _ in docs_and_scores]
 
-    def _create_where_by_filter(self, filter):  # type: ignore[no-untyped-def]
-        query_tuple = []
-        where_str = ""
+    def create_where_clause(self, filter):  # type: ignore[no-untyped-def]
+        """Serializes filter to a where clause (prepared_statement) and parameters
+
+        The where clause should be appended to an existing SQL statement.
+
+        Example usage:
+        where_clause, parameters = self._sql_serialize_filter(filter)
+        cursor.execute(f"{stmt} {where_clause}", parameters)
+        """
         if filter:
-            where_str, query_tuple = self._process_filter_object(filter)
-            where_str = " WHERE " + where_str
-        return where_str, query_tuple
+            statement, parameters = self._create_where_clause(filter)
+            if statement.count("?") != len(parameters):
+                raise RuntimeError(f"{statement=} does not match {parameters=}")
+            return f"WHERE {statement}", parameters
+        else:
+            return "", []
 
-    def _process_filter_object(self, filter):  # type: ignore[no-untyped-def]
-        query_tuple = []
-        where_str = ""
-        if filter:
-            for i, key in enumerate(filter.keys()):
-                filter_value = filter[key]
-                if i != 0:
-                    where_str += " AND "
+    @staticmethod
+    def _determine_typed_sql_placeholder(value):  # type: ignore[no-untyped-def]
+        if isinstance(value, dict) and ("type" in value) and (value["type"] == "date"):
+            return "TO_DATE(?)", value["date"]
+        if isinstance(value, (dict, list, tuple)):
+            raise ValueError(f"Cannot handle {value=}")
+        the_type = type(value)
+        if the_type is bool:
+            return "TO_BOOLEAN(?)", "true" if value else "false"
+        if the_type in (int, float):
+            return "TO_DOUBLE(?)", value
+        logger.warning(f"Plain SQL Placeholder '?' for {value=}")
+        return "?", value
 
-                # Handling of 'special' boolean operators "$and", "$or"
-                if key in LOGICAL_OPERATORS_TO_SQL:
-                    logical_operator = LOGICAL_OPERATORS_TO_SQL[key]
-                    logical_operands = filter_value
-                    for j, logical_operand in enumerate(logical_operands):
-                        if j != 0:
-                            where_str += f" {logical_operator} "
-                        (
-                            where_str_logical,
-                            query_tuple_logical,
-                        ) = self._process_filter_object(logical_operand)
-                        where_str += "(" + where_str_logical + ")"
-                        query_tuple += query_tuple_logical
-                    continue
+    @staticmethod
+    def _sql_serialize_logical_clauses(
+        sql_operator: str, sql_clauses: list[str]
+    ) -> str:
+        supported_operators = LOGICAL_OPERATORS_TO_SQL.values()
+        if sql_operator not in supported_operators:
+            raise ValueError(f"{sql_operator=}, is not in {supported_operators=}")
+        if not sql_clauses:
+            raise ValueError("sql_clauses is empty")
+        if not all(sql_clauses):
+            raise ValueError(f"Empty sql clause in {sql_clauses=}")
+        if len(sql_clauses) == 1:
+            return sql_clauses[0]
+        return f" {sql_operator} ".join([f"({clause})" for clause in sql_clauses])
 
-                operator = "="
-                sql_param = "?"
+    def _sql_serialize_logical_operation(self, operator: str, operands):  # type: ignore[no-untyped-def]
+        if not isinstance(operands, (list, set, tuple)):
+            raise ValueError(f"Unexpected operands for {operator=}: {operands=}")
+        if operator not in LOGICAL_OPERATORS_TO_SQL:
+            raise ValueError(
+                f"Expected operator from {LOGICAL_OPERATORS_TO_SQL=}"
+                f", but got {operator=}"
+            )
+        sql_clauses, query_tuple = [], []
+        for operand in operands:
+            ret_sql_clause, ret_query_tuple = self._create_where_clause(operand)
+            sql_clauses.append(ret_sql_clause)
+            query_tuple += ret_query_tuple
+        return (
+            HanaDB._sql_serialize_logical_clauses(
+                LOGICAL_OPERATORS_TO_SQL[operator], sql_clauses
+            ),
+            query_tuple,
+        )
 
-                if isinstance(filter_value, bool):
-                    query_tuple.append("true" if filter_value else "false")
-                elif isinstance(filter_value, int) or isinstance(filter_value, str):
-                    query_tuple.append(filter_value)
-                elif isinstance(filter_value, dict):
-                    # Handling of 'special' operators starting with "$"
-                    special_op = next(iter(filter_value))
-                    special_val = filter_value[special_op]
-                    # "$eq", "$ne", "$lt", "$lte", "$gt", "$gte"
-                    if special_op in COMPARISONS_TO_SQL:
-                        operator = COMPARISONS_TO_SQL[special_op]
-                        if isinstance(special_val, bool):
-                            query_tuple.append("true" if special_val else "false")
-                        elif isinstance(special_val, float):
-                            sql_param = "CAST(? as float)"
-                            query_tuple.append(special_val)
-                        elif (
-                            isinstance(special_val, dict)
-                            and "type" in special_val
-                            and special_val["type"] == "date"
-                        ):
-                            # Date type
-                            sql_param = "CAST(? as DATE)"
-                            query_tuple.append(special_val["date"])
-                        else:
-                            query_tuple.append(special_val)
-                    # "$between"
-                    elif special_op == BETWEEN_OPERATOR:
-                        between_from = special_val[0]
-                        between_to = special_val[1]
-                        operator = "BETWEEN"
-                        sql_param = "? AND ?"
-                        query_tuple.append(between_from)
-                        query_tuple.append(between_to)
-                    # "$like"
-                    elif special_op == LIKE_OPERATOR:
-                        operator = "LIKE"
-                        query_tuple.append(special_val)
-                    # "$contains"
-                    elif special_op == CONTAINS_OPERATOR:
-                        operator = CONTAINS_OPERATOR
-                        query_tuple.append(special_val)
-                    # "$in", "$nin"
-                    elif special_op in IN_OPERATORS_TO_SQL:
-                        operator = IN_OPERATORS_TO_SQL[special_op]
-                        if isinstance(special_val, list):
-                            for i, list_entry in enumerate(special_val):
-                                if i == 0:
-                                    sql_param = "("
-                                sql_param = sql_param + "?"
-                                if i == (len(special_val) - 1):
-                                    sql_param = sql_param + ")"
-                                else:
-                                    sql_param = sql_param + ","
-                                query_tuple.append(list_entry)
-                        else:
-                            raise ValueError(
-                                f"Unsupported value for {operator}: {special_val}"
-                            )
-                    else:
-                        raise ValueError(f"Unsupported operator: {special_op}")
-                else:
-                    raise ValueError(
-                        f"Unsupported filter data-type: {type(filter_value)}"
+    def _create_selector(self, column: str):
+        if column in self.specific_metadata_columns:
+            return f'"{column}"'
+        else:
+            return f"JSON_VALUE({self.metadata_column}, '$.{column}')"
+
+    def _sql_serialize_column_operation(
+        self, column: str, operator: str, operands: dict
+    ):
+        if operator in LOGICAL_OPERATORS_TO_SQL:
+            raise ValueError(
+                f"Did not expect oerator from {LOGICAL_OPERATORS_TO_SQL=}"
+                f", but got {operator=}"
+            )
+        if operator not in COLUMN_OPERATORS:
+            raise ValueError(f"{operator=} not in {COLUMN_OPERATORS=}")
+        if not operands:
+            raise ValueError("No operands provided")
+        if operator == CONTAINS_OPERATOR:
+            placeholder, value = HanaDB._determine_typed_sql_placeholder(operands)
+            statement = (
+                f"SCORE({placeholder} IN (\"{column}\" EXACT SEARCH MODE 'text')) > 0"
+            )
+            return statement, [value]
+        sql_operator = COLUMN_OPERATORS[operator]
+        selector = self._create_selector(column)
+        if operator == BETWEEN_OPERATOR:
+            if len(operands) != 2:
+                raise ValueError(f"Expected 2 operands, but got {operands=}")
+            from_placeholder, from_value = HanaDB._determine_typed_sql_placeholder(
+                operands[0]
+            )
+            to_placeholder, to_value = HanaDB._determine_typed_sql_placeholder(
+                operands[1]
+            )
+            statement = (
+                f"{selector} {sql_operator} {from_placeholder} AND {to_placeholder}"
+            )
+            return statement, [from_value, to_value]
+        if operator in IN_OPERATORS_TO_SQL:
+            if not isinstance(operands, list):
+                raise ValueError(f"Expected a list, but got {operands=}")
+            placeholder_value_list = [
+                HanaDB._determine_typed_sql_placeholder(item) for item in operands
+            ]
+            placeholders = ", ".join([item[0] for item in placeholder_value_list])
+            values = [item[1] for item in placeholder_value_list]
+            statement = f"{selector} {sql_operator} ({placeholders})"
+            return statement, values
+        # Default behavior for single value operators.
+        placeholder, value = HanaDB._determine_typed_sql_placeholder(operands)
+        statement = f"{selector} {sql_operator} {placeholder}"
+        return statement, [value]
+
+    def _create_where_clause(self, filter: dict):  # type: ignore[no-untyped-def]
+        if not filter:
+            raise RuntimeError("Empty filter")
+        statements = []
+        parameters = []
+        for key, value in filter.items():
+            if key.startswith("$"):
+                # Generic filter objects may only have logical operators.
+                if key not in LOGICAL_OPERATORS_TO_SQL:
+                    raise ValueError(f"Unexpected operator {key=} in {filter=}")
+                ret_sql_clause, ret_query_tuple = self._sql_serialize_logical_operation(
+                    key, value
+                )
+            else:
+                if not isinstance(value, (bool, int, str, dict)):
+                    raise ValueError(f"Unsupported filter value type: {type(value)}")
+                if isinstance(value, dict) and "type" not in value:
+                    # Value is an operator.
+                    if len(value) != 1:
+                        raise ValueError(
+                            "Expecting a single entry 'operator: operands'"
+                            f", but got {value=}"
+                        )
+                    operator, operands = list(value.items())[0]
+                    ret_sql_clause, ret_query_tuple = (
+                        self._sql_serialize_column_operation(key, operator, operands)
                     )
-
-                if operator == CONTAINS_OPERATOR:
-                    where_str += f"SCORE(? IN (\"{key}\" EXACT SEARCH MODE 'text')) > 0"
                 else:
-                    selector = (
-                        f' "{key}"'
-                        if key in self.specific_metadata_columns
-                        else f"JSON_VALUE({self.metadata_column}, '$.{key}')"
-                    )
-                    where_str += f"{selector} " f"{operator} {sql_param}"
-
-        return where_str, query_tuple
+                    placeholder, value = HanaDB._determine_typed_sql_placeholder(value)
+                    ret_sql_clause = f"{self._create_selector(key)} = {placeholder}"
+                    ret_query_tuple = [value]
+            statements.append(ret_sql_clause)
+            parameters += ret_query_tuple
+        return HanaDB._sql_serialize_logical_clauses("AND", statements), parameters
 
     def delete(  # type: ignore[override]
         self, ids: Optional[list[str]] = None, filter: Optional[dict] = None
@@ -1127,12 +1190,12 @@ class HanaDB(VectorStore):
         if filter is None:
             raise ValueError("Parameter 'filter' is required when calling 'delete'")
 
-        where_str, query_tuple = self._create_where_by_filter(filter)
-        sql_str = f'DELETE FROM "{self.table_name}" {where_str}'
+        where_clause, parameters = self.create_where_clause(filter)
+        sql_str = f'DELETE FROM "{self.table_name}" {where_clause}'
 
         try:
             cur = self.connection.cursor()
-            cur.execute(sql_str, query_tuple)
+            cur.execute(sql_str, parameters)
         finally:
             cur.close()
 
