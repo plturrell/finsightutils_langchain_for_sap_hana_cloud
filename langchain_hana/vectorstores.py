@@ -55,14 +55,18 @@ LIKE_OPERATOR = "$like"
 
 CONTAINS_OPERATOR = "$contains"
 
+
+class ContainsNeedsSpecialSqlSyntax:
+    def __repr__(self):
+        raise RuntimeError(f"{CONTAINS_OPERATOR} needs special SQL syntax")
+
+
 COLUMN_OPERATORS = {
     **COMPARISONS_TO_SQL,
     **IN_OPERATORS_TO_SQL,
     BETWEEN_OPERATOR: "BETWEEN",
     LIKE_OPERATOR: "LIKE",
-    CONTAINS_OPERATOR: lambda: (_ for _ in ()).throw(
-        RuntimeError(f"{CONTAINS_OPERATOR} needs special SQL syntax")
-    ),
+    CONTAINS_OPERATOR: ContainsNeedsSpecialSqlSyntax(),
 }
 
 LOGICAL_OPERATORS_TO_SQL = {"$and": "AND", "$or": "OR"}
@@ -1095,7 +1099,7 @@ class HanaDB(VectorStore):
                 f", but got {operator=}"
             )
         if operator not in COLUMN_OPERATORS:
-            raise ValueError(f"{operator=} not in {COLUMN_OPERATORS=}")
+            raise ValueError(f"{operator=} not in {COLUMN_OPERATORS.keys()=}")
         if not operands:
             raise ValueError("No operands provided")
         if operator == CONTAINS_OPERATOR:
