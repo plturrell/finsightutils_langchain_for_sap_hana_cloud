@@ -24,6 +24,8 @@ TYPE_4B_FILTERING_TEST_CASES = [
     (
         {"name": {"$nin": ["adam", "bob"]}},
         [3],
+        "WHERE JSON_VALUE(VEC_META, '$.name') NOT IN (?, ?)",
+        ["adam", "bob"],
     ),
 ]
 
@@ -869,7 +871,11 @@ def test_hanavector_enhanced_filter_1() -> None:
 
 
 def _impl_test_hanavector_with_with_metadata_filters(
-    test_filter: Dict[str, Any], expected_ids: List[int], table_name: str
+    test_filter: Dict[str, Any],
+    expected_ids: List[int],
+    expected_where_clause: str,
+    expected_where_clause_parameters: List[Any],
+    table_name: str
 ):
     vectorDB = HanaDB(
         connection=test_setup.conn,
@@ -882,75 +888,91 @@ def _impl_test_hanavector_with_with_metadata_filters(
 
     vectorDB.add_documents(DOCUMENTS)
 
+    # Validate WHERE clause and parameters
+    where_clause, parameters = vectorDB.create_where_clause(test_filter)
+    assert where_clause == expected_where_clause, f"{expected_where_clause=},{where_clause=}"
+    assert parameters == expected_where_clause_parameters, f"{expected_where_clause_parameters=}, {parameters=}"
+
     docs = vectorDB.similarity_search("meow", k=5, filter=test_filter)
     ids = [doc.metadata["id"] for doc in docs]
-    assert len(ids) == len(expected_ids), test_filter
-    assert set(ids).issubset(expected_ids), test_filter
+    assert sorted(ids) == sorted(expected_ids)
 
 
-@pytest.mark.parametrize("test_filter, expected_ids", TYPE_1_FILTERING_TEST_CASES)
+@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", TYPE_1_FILTERING_TEST_CASES)
 @pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
 def test_hanavector_with_with_metadata_filters_1(
     test_filter: Dict[str, Any],
     expected_ids: List[int],
+    expected_where_clause: str,
+    expected_where_clause_parameters: List[Any],
 ) -> None:
     _impl_test_hanavector_with_with_metadata_filters(
-        test_filter, expected_ids, "TEST_TABLE_ENHANCED_FILTER_1"
+        test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters, "TEST_TABLE_ENHANCED_FILTER_1"
     )
 
 
-@pytest.mark.parametrize("test_filter, expected_ids", TYPE_2_FILTERING_TEST_CASES)
+@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", TYPE_2_FILTERING_TEST_CASES)
 @pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
 def test_hanavector_with_with_metadata_filters_2(
     test_filter: Dict[str, Any],
     expected_ids: List[int],
+    expected_where_clause: str,
+    expected_where_clause_parameters: List[Any],
 ) -> None:
     _impl_test_hanavector_with_with_metadata_filters(
-        test_filter, expected_ids, "TEST_TABLE_ENHANCED_FILTER_2"
+        test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters, "TEST_TABLE_ENHANCED_FILTER_2"
     )
 
 
-@pytest.mark.parametrize("test_filter, expected_ids", TYPE_3_FILTERING_TEST_CASES)
+@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", TYPE_3_FILTERING_TEST_CASES)
 @pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
 def test_hanavector_with_with_metadata_filters_3(
     test_filter: Dict[str, Any],
     expected_ids: List[int],
+    expected_where_clause: str,
+    expected_where_clause_parameters: List[Any],
 ) -> None:
     _impl_test_hanavector_with_with_metadata_filters(
-        test_filter, expected_ids, "TEST_TABLE_ENHANCED_FILTER_3"
+        test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters, "TEST_TABLE_ENHANCED_FILTER_3"
     )
 
 
-@pytest.mark.parametrize("test_filter, expected_ids", TYPE_4_FILTERING_TEST_CASES)
+@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", TYPE_4_FILTERING_TEST_CASES)
 @pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
 def test_hanavector_with_with_metadata_filters_4(
     test_filter: Dict[str, Any],
     expected_ids: List[int],
+    expected_where_clause: str,
+    expected_where_clause_parameters: List[Any],
 ) -> None:
     _impl_test_hanavector_with_with_metadata_filters(
-        test_filter, expected_ids, "TEST_TABLE_ENHANCED_FILTER_4"
+        test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters, "TEST_TABLE_ENHANCED_FILTER_4"
     )
 
 
-@pytest.mark.parametrize("test_filter, expected_ids", TYPE_4B_FILTERING_TEST_CASES)
+@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", TYPE_4B_FILTERING_TEST_CASES)
 @pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
 def test_hanavector_with_with_metadata_filters_4b(
     test_filter: Dict[str, Any],
     expected_ids: List[int],
+    expected_where_clause: str,
+    expected_where_clause_parameters: List[Any],
 ) -> None:
     _impl_test_hanavector_with_with_metadata_filters(
-        test_filter, expected_ids, "TEST_TABLE_ENHANCED_FILTER_4B"
+        test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters, "TEST_TABLE_ENHANCED_FILTER_4B"
     )
 
 
-@pytest.mark.parametrize("test_filter, expected_ids", TYPE_5_FILTERING_TEST_CASES)
+@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", TYPE_5_FILTERING_TEST_CASES)
 @pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
 def test_hanavector_with_with_metadata_filters_5(
     test_filter: Dict[str, Any],
     expected_ids: List[int],
+    expected_where_clause: str,
+    expected_where_clause_parameters: List[Any],
 ) -> None:
     _impl_test_hanavector_with_with_metadata_filters(
-        test_filter, expected_ids, "TEST_TABLE_ENHANCED_FILTER_5"
+        test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters, "TEST_TABLE_ENHANCED_FILTER_5"
     )
 
 
