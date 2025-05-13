@@ -1,7 +1,6 @@
 """Test HANA vectorstore functionality."""
 
 import os
-import random
 from typing import Any, Dict, List
 
 import numpy as np
@@ -1561,3 +1560,47 @@ def test_hanavector_keyword_search_unspecific_metadata_column(
 
     # Validate the results
     assert len(docs) == 0, "Expected no results for non-existing keyword"
+
+
+@pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
+def test_create_where_clause_empty_filter() -> None:
+    """Test that create_where_clause returns empty strings for empty filter."""
+    vectordb = HanaDB(
+        connection=test_setup.conn,
+        embedding=embedding,
+        table_name="TEST_TABLE",
+    )
+
+    where_clause, parameters = vectordb.create_where_clause({})
+    assert where_clause == ""
+    assert parameters == []
+
+
+@pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
+def test_create_where_clause_invalid_operator() -> None:
+    """Test exception for invalid operator in create_where_clause."""
+    vectordb = HanaDB(
+        connection=test_setup.conn,
+        embedding=embedding,
+        table_name="TEST_TABLE",
+    )
+
+    invalid_filter = {"$eq": [{"key": "value"}]}
+
+    with pytest.raises(ValueError, match="Unexpected operator"):
+        vectordb.create_where_clause(invalid_filter)
+
+
+@pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
+def test_create_where_clause_unsupported_filter_value() -> None:
+    """Test exception for unsupported filter value type in create_where_clause."""
+    vectordb = HanaDB(
+        connection=test_setup.conn,
+        embedding=embedding,
+        table_name="TEST_TABLE",
+    )
+
+    unsupported_filter = {"key": [1, 2, 3]}  # List is not a supported value type
+
+    with pytest.raises(ValueError, match="Unsupported filter value type"):
+        vectordb.create_where_clause(unsupported_filter)
