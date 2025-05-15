@@ -58,7 +58,7 @@ CONTAINS_OPERATOR = "$contains"
 
 class ContainsNeedsSpecialSqlSyntax:
     def __repr__(self):
-        raise RuntimeError(f"{CONTAINS_OPERATOR} needs special SQL syntax")
+        raise AssertionError(f"{CONTAINS_OPERATOR} needs special SQL syntax")
 
 
 COLUMN_OPERATORS = {
@@ -1029,8 +1029,7 @@ class HanaDB(VectorStore):
         """
         if filter:
             statement, parameters = self._create_where_clause(filter)
-            if statement.count("?") != len(parameters):
-                raise RuntimeError(f"{statement=} does not match {parameters=}")
+            assert statement.count("?") == len(parameters)
             return f"WHERE {statement}", parameters
         else:
             return "", []
@@ -1140,7 +1139,7 @@ class HanaDB(VectorStore):
 
     def _create_where_clause(self, filter: dict):  # type: ignore[no-untyped-def]
         if not filter:
-            raise RuntimeError("Empty filter")
+            raise ValueError("Empty filter")
         statements = []
         parameters = []
         for key, value in filter.items():
@@ -1239,7 +1238,7 @@ class HanaDB(VectorStore):
                 res = cur.fetchall()
                 return self._deserialize_binary_format(res[0][0])
             else:
-                raise RuntimeError("No result set returned for query embedding.")
+                raise ValueError("No result set returned for query embedding.")
         finally:
             cur.close()
 
