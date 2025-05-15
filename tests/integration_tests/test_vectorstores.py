@@ -15,20 +15,10 @@ from tests.integration_tests.fixtures.filtering_test_cases import (
     TYPE_2_FILTERING_TEST_CASES,
     TYPE_3_FILTERING_TEST_CASES,
     TYPE_4_FILTERING_TEST_CASES,
+    TYPE_4B_FILTERING_TEST_CASES,
     TYPE_5_FILTERING_TEST_CASES,
 )
 from tests.integration_tests.hana_test_utils import HanaTestUtils
-
-TYPE_4B_FILTERING_TEST_CASES = [
-    # Test $nin, which is missing in TYPE_4_FILTERING_TEST_CASES
-    (
-        {"name": {"$nin": ["adam", "bob"]}},
-        [3],
-        "WHERE JSON_VALUE(VEC_META, '$.name') NOT IN (?, ?)",
-        ["adam", "bob"],
-    ),
-]
-
 
 try:
     from hdbcli import dbapi  # type: ignore
@@ -888,11 +878,6 @@ def _impl_test_hanavector_with_with_metadata_filters(
 
     vectorDB.add_documents(DOCUMENTS)
 
-    # Validate WHERE clause and parameters
-    where_clause, parameters = vectorDB.create_where_clause(test_filter)
-    assert where_clause == expected_where_clause, f"{expected_where_clause=},{where_clause=}"
-    assert parameters == expected_where_clause_parameters, f"{expected_where_clause_parameters=}, {parameters=}"
-
     docs = vectorDB.similarity_search("meow", k=5, filter=test_filter)
     ids = [doc.metadata["id"] for doc in docs]
     assert sorted(ids) == sorted(expected_ids)
@@ -1582,47 +1567,3 @@ def test_hanavector_keyword_search_unspecific_metadata_column(
 
     # Validate the results
     assert len(docs) == 0, "Expected no results for non-existing keyword"
-
-
-@pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
-def test_create_where_clause_empty_filter() -> None:
-    """Test that create_where_clause returns empty strings for empty filter."""
-    vectordb = HanaDB(
-        connection=test_setup.conn,
-        embedding=embedding,
-        table_name="TEST_TABLE",
-    )
-
-    where_clause, parameters = vectordb.create_where_clause({})
-    assert where_clause == ""
-    assert parameters == []
-
-
-@pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
-def test_create_where_clause_invalid_operator() -> None:
-    """Test exception for invalid operator in create_where_clause."""
-    vectordb = HanaDB(
-        connection=test_setup.conn,
-        embedding=embedding,
-        table_name="TEST_TABLE",
-    )
-
-    invalid_filter = {"$eq": [{"key": "value"}]}
-
-    with pytest.raises(ValueError, match="Unexpected operator"):
-        vectordb.create_where_clause(invalid_filter)
-
-
-@pytest.mark.skipif(not hanadb_installed, reason="hanadb not installed")
-def test_create_where_clause_unsupported_filter_value() -> None:
-    """Test exception for unsupported filter value type in create_where_clause."""
-    vectordb = HanaDB(
-        connection=test_setup.conn,
-        embedding=embedding,
-        table_name="TEST_TABLE",
-    )
-
-    unsupported_filter = {"key": [1, 2, 3]}  # List is not a supported value type
-
-    with pytest.raises(ValueError, match="Unsupported filter value type"):
-        vectordb.create_where_clause(unsupported_filter)

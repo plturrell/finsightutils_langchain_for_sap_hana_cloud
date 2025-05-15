@@ -270,6 +270,16 @@ TYPE_4_FILTERING_TEST_CASES = [
     ),
 ]
 
+TYPE_4B_FILTERING_TEST_CASES = [
+    # Test $nin, which is missing in TYPE_4_FILTERING_TEST_CASES
+    (
+        {"name": {"$nin": ["adam", "bob"]}},
+        [3],
+        "WHERE JSON_VALUE(VEC_META, '$.name') NOT IN (?, ?)",
+        ["adam", "bob"],
+    ),
+]
+
 TYPE_5_FILTERING_TEST_CASES = [
     # These involve special operators like $like, $ilike that
     # may be specified to certain databases.
