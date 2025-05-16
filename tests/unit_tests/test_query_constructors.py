@@ -11,14 +11,7 @@ from langchain_core.structured_query import (
 
 from langchain_hana.query_constructors import CreateWhereClause, HanaTranslator
 from langchain_hana.vectorstores import default_metadata_column
-from tests.integration_tests.fixtures.filtering_test_cases import (
-    TYPE_1_FILTERING_TEST_CASES,
-    TYPE_2_FILTERING_TEST_CASES,
-    TYPE_3_FILTERING_TEST_CASES,
-    TYPE_4_FILTERING_TEST_CASES,
-    TYPE_4B_FILTERING_TEST_CASES,
-    TYPE_5_FILTERING_TEST_CASES,
-)
+from tests.integration_tests.fixtures.filtering_test_cases import FILTERING_TEST_CASES
 
 DEFAULT_TRANSLATOR = HanaTranslator()
 
@@ -113,63 +106,8 @@ def test_create_where_clause_unsupported_filter_value_type() -> None:
     with pytest.raises(ValueError, match="Unsupported filter value type"):
         CreateWhereClause(MockHanaDb())(unsupported_filter)
 
-@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", TYPE_1_FILTERING_TEST_CASES)
-def test_create_where_clause_1(
-    test_filter: Dict[str, Any],
-    expected_ids: List[int],
-    expected_where_clause: str,
-    expected_where_clause_parameters: List[Any],
-) -> None:
-    where_clause, parameters = CreateWhereClause(MockHanaDb())(test_filter)
-    assert expected_where_clause == where_clause
-    assert expected_where_clause_parameters == parameters
-
-@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", TYPE_2_FILTERING_TEST_CASES)
-def test_create_where_clause_2(
-    test_filter: Dict[str, Any],
-    expected_ids: List[int],
-    expected_where_clause: str,
-    expected_where_clause_parameters: List[Any],
-) -> None:
-    where_clause, parameters = CreateWhereClause(MockHanaDb())(test_filter)
-    assert expected_where_clause == where_clause
-    assert expected_where_clause_parameters == parameters
-
-@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", TYPE_3_FILTERING_TEST_CASES)
-def test_create_where_clause_3(
-    test_filter: Dict[str, Any],
-    expected_ids: List[int],
-    expected_where_clause: str,
-    expected_where_clause_parameters: List[Any],
-) -> None:
-    where_clause, parameters = CreateWhereClause(MockHanaDb())(test_filter)
-    assert expected_where_clause == where_clause
-    assert expected_where_clause_parameters == parameters
-
-@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", TYPE_4_FILTERING_TEST_CASES)
-def test_create_where_clause_4(
-    test_filter: Dict[str, Any],
-    expected_ids: List[int],
-    expected_where_clause: str,
-    expected_where_clause_parameters: List[Any],
-) -> None:
-    where_clause, parameters = CreateWhereClause(MockHanaDb())(test_filter)
-    assert expected_where_clause == where_clause
-    assert expected_where_clause_parameters == parameters
-
-@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", TYPE_4B_FILTERING_TEST_CASES)
-def test_create_where_clause_4b(
-    test_filter: Dict[str, Any],
-    expected_ids: List[int],
-    expected_where_clause: str,
-    expected_where_clause_parameters: List[Any],
-) -> None:
-    where_clause, parameters = CreateWhereClause(MockHanaDb())(test_filter)
-    assert expected_where_clause == where_clause
-    assert expected_where_clause_parameters == parameters
-
-@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", TYPE_5_FILTERING_TEST_CASES)
-def test_create_where_clause_5(
+@pytest.mark.parametrize("test_filter, expected_ids, expected_where_clause, expected_where_clause_parameters", FILTERING_TEST_CASES)
+def test_create_where_clause(
     test_filter: Dict[str, Any],
     expected_ids: List[int],
     expected_where_clause: str,
