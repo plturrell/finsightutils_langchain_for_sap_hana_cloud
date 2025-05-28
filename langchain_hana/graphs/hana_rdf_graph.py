@@ -303,56 +303,36 @@ class HanaRdfGraph:
         Returns:
             A SPARQL CONSTRUCT query string.
         """
-        ontology_query = f"""
-        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        ontology_query =  f"""
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl:  <http://www.w3.org/2002/07/owl#>
-
-        CONSTRUCT {{
-          ?C   rdf:type   owl:Class ;
-               rdfs:label ?clabel .
-
-          ?P1  rdf:type       owl:ObjectProperty ;
-               rdfs:domain    ?dom1 ;
-               rdfs:range     ?rng1 ;
-               rdfs:label     ?plab1 .
-
-          ?P2  rdf:type       owl:DatatypeProperty ;
-               rdfs:domain    ?dom2 ;
-               rdfs:range     ?rng2 ;
-               rdfs:label     ?plab2 .
-        }} FROM <{graph_uri}>
-        WHERE {{
-          {{
-            SELECT DISTINCT ?C ?clabel WHERE {{
-              ?s rdf:type ?C .
-              OPTIONAL {{ ?C rdfs:label ?clabel }}
+        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        CONSTRUCT {{ ?cls rdf:type owl:Class . ?cls rdfs:label ?clsLabel . ?rel rdf:type ?propertyType . ?rel rdfs:label ?relLabel . ?rel rdfs:domain ?domain . ?rel rdfs:range ?range .}}
+        FROM <{graph_uri}>
+        WHERE {{ # get properties
+            {{SELECT DISTINCT ?domain ?rel ?relLabel ?propertyType ?range
+            WHERE {{
+                ?subj ?rel ?obj .
+                ?subj a ?domain .
+                OPTIONAL{{?obj a ?rangeClass .}}
+                FILTER(?rel != rdf:type) #I think we should remove type
+                BIND(IF(isIRI(?obj) = true, owl:ObjectProperty, owl:DatatypeProperty) AS ?propertyType)
+                BIND(COALESCE(?rangeClass, DATATYPE(?obj)) AS ?range)
+                BIND(STR(?rel) AS ?uriStr)       # Convert URI to string
+                BIND(REPLACE(?uriStr, "^.*[/#]", "") AS ?relLabel)
+            }}}}
+            UNION {{ # get classes
+                SELECT DISTINCT ?cls ?clsLabel
+                WHERE {{
+                    ?instance a/rdfs:subClassOf* ?cls .
+                    FILTER (isIRI(?cls)) .
+                    BIND(STR(?cls) AS ?uriStr)       # Convert URI to string
+                    BIND(REPLACE(?uriStr, "^.*[/#]", "") AS ?clsLabel)
+                }}
             }}
-          }}
-
-          UNION
-          {{
-            SELECT DISTINCT ?P1 ?dom1 ?rng1 ?plab1 WHERE {{
-              ?s  ?P1 ?o1 .
-              FILTER (!isLiteral(?o1)) .
-              ?s  rdf:type   ?dom1 .
-              ?o1 rdf:type   ?rng1 .
-              OPTIONAL {{ ?P1 rdfs:label ?plab1 }}
-            }}
-          }}
-
-          UNION
-          {{
-            SELECT DISTINCT ?P2 ?dom2 ?rng2 ?plab2 WHERE {{
-              ?s  ?P2 ?o2 .
-              FILTER ( isLiteral(?o2) ) .
-              ?s  rdf:type       ?dom2 .
-              BIND(datatype(?o2) AS ?rng2) .
-              FILTER( !STRSTARTS(str(?P2), "http://www.w3.org/") ) .
-              OPTIONAL {{ ?P2 rdfs:label ?plab2 }}
-            }}
-          }}
-        }}"""
+        }}
+        """
         return ontology_query
 
     @property
