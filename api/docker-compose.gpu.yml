@@ -6,6 +6,8 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - GPU_ENABLED=true
+      - USE_TENSORRT=true
+      - TENSORRT_PRECISION=fp16
     deploy:
       resources:
         reservations:
@@ -13,3 +15,15 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+              
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://api:8000
+    depends_on:
+      - api
+    restart: unless-stopped

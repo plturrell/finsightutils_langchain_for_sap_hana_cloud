@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "name": "langchain-hana-api",
+  "name": "langchain-hana-app",
   "builds": [
     {
       "src": "api/index.py",
@@ -9,48 +9,56 @@
         "runtime": "python3.10",
         "maxDuration": 60
       }
+    },
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/docs",
+      "src": "/api/docs",
       "dest": "api/index.py"
     },
     {
-      "src": "/openapi.json",
+      "src": "/api/openapi.json",
       "dest": "api/index.py"
     },
     {
-      "src": "/texts",
+      "src": "/api/texts",
       "methods": ["POST"],
       "dest": "api/index.py"
     },
     {
-      "src": "/query",
+      "src": "/api/query",
       "methods": ["POST"],
       "dest": "api/index.py"
     },
     {
-      "src": "/query/vector",
+      "src": "/api/query/vector",
       "methods": ["POST"],
       "dest": "api/index.py"
     },
     {
-      "src": "/delete",
+      "src": "/api/delete",
       "methods": ["POST"],
       "dest": "api/index.py"
     },
     {
-      "src": "/benchmark/(.*)",
+      "src": "/api/benchmark/(.*)",
       "dest": "api/index.py"
     },
     {
-      "src": "/__health",
+      "src": "/api/health",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/api/(.*)",
       "dest": "api/index.py"
     },
     {
       "src": "/(.*)",
-      "dest": "api/index.py"
+      "dest": "frontend/$1"
     }
   ],
   "env": {
@@ -59,6 +67,7 @@
     "LOG_LEVEL": "INFO",
     "GPU_ENABLED": "false",
     "USE_INTERNAL_EMBEDDINGS": "false",
-    "EMBEDDING_MODEL": "all-MiniLM-L6-v2"
+    "EMBEDDING_MODEL": "all-MiniLM-L6-v2",
+    "REACT_APP_API_URL": "/api"
   }
 }

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script to deploy the API to Vercel
+# Script to deploy the full application (API + Frontend) to Vercel
 
 set -e
 
@@ -25,6 +25,7 @@ HANA_USER=your_username
 HANA_PASSWORD=your_password
 LOG_LEVEL=INFO
 EMBEDDING_MODEL=all-MiniLM-L6-v2
+REACT_APP_API_URL=/api
 EOL
     echo "Please update .env.vercel with your SAP HANA Cloud credentials"
     exit 1

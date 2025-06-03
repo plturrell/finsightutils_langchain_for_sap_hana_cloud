@@ -2,7 +2,7 @@ name: SAP HANA Cloud LangChain Integration with GPU Acceleration
 version: 1.0.2
 organization: plturrell
 collection: sap-enhanced
-description: FastAPI service for SAP HANA Cloud vector store operations with NVIDIA GPU acceleration and TensorRT optimization
+description: Comprehensive solution for SAP HANA Cloud vector store operations with NVIDIA GPU acceleration, TensorRT optimization, and Jony Ive-inspired frontend
 runtimeEnvironment: vm
  
 license: Apache-2.0
@@ -47,6 +47,22 @@ components:
       storage:
         min: 20Gi
         recommended: 50Gi
+        
+  - name: frontend
+    type: service
+    container:
+      image: nvcr.io/plturrell/sap-enhanced/langchain-hana-frontend:latest
+      ports:
+        - containerPort: 3000
+          protocol: TCP
+          expose: true
+    resources:
+      memory:
+        min: 2Gi
+        recommended: 4Gi
+      cpu:
+        min: 2
+        recommended: 4
 
 documentation:
   overview: |
@@ -112,8 +128,17 @@ documentation:
       nvcr.io/plturrell/sap-enhanced/langchain-hana-gpu:latest
     ```
     
-    ### Step 5: Access the API
+    ### Step 5: Start the frontend
     
+    ```bash
+    docker run -p 3000:3000 \
+      -e REACT_APP_API_URL=http://localhost:8000 \
+      nvcr.io/plturrell/sap-enhanced/langchain-hana-frontend:latest
+    ```
+    
+    ### Step 6: Access the application
+    
+    - Frontend UI: http://localhost:3000
     - API documentation: http://localhost:8000/docs
     - GPU information: http://localhost:8000/benchmark/gpu_info
     - Benchmarking: http://localhost:8000/benchmark/tensorrt
