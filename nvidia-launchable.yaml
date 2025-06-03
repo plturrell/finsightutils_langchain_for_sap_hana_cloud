@@ -3,7 +3,8 @@ version: 1.0.2
 organization: plturrell
 collection: sap-enhanced
 description: FastAPI service for SAP HANA Cloud vector store operations with NVIDIA GPU acceleration and TensorRT optimization
-
+runtimeEnvironment: vm
+ 
 license: Apache-2.0
 maintainer: plturrell@github.com
 supportContact: support@example.com
@@ -59,26 +60,59 @@ documentation:
   quickStart: |
     ## Quick Start
     
-    1. Pull the container:
-       ```bash
-       docker pull nvcr.io/plturrell/sap-enhanced/langchain-hana-gpu:latest
-       ```
+    ### Step 1: Authenticate with NGC
     
-    2. Run with GPU support:
-       ```bash
-       docker run --gpus all -p 8000:8000 \
-         -e HANA_HOST=your-hana-host \
-         -e HANA_PORT=your-hana-port \
-         -e HANA_USER=your-hana-user \
-         -e HANA_PASSWORD=your-hana-password \
-         -e GPU_ENABLED=true \
-         -e USE_TENSORRT=true \
-         nvcr.io/plturrell/sap-enhanced/langchain-hana-gpu:latest
-       ```
+    ```bash
+    # Install NGC CLI
+    wget -O ngccli.zip https://ngc.nvidia.com/downloads/ngccli_linux.zip
+    unzip -o ngccli.zip
+    chmod u+x ngc-cli/ngc
+    echo 'export PATH="$PATH:$HOME/ngc-cli"' >> ~/.bashrc
+    source ~/.bashrc
     
-    3. Access the API:
-       - API documentation: http://localhost:8000/docs
-       - GPU information: http://localhost:8000/benchmark/gpu_info
+    # Configure NGC CLI with your API key (get it from https://ngc.nvidia.com/setup/api-key)
+    ngc config set
+    
+    # Log in to Docker with NGC credentials
+    docker login nvcr.io
+    ```
+    
+    ### Step 2: Pull the container
+    
+    ```bash
+    docker pull nvcr.io/plturrell/sap-enhanced/langchain-hana-gpu:latest
+    ```
+    
+    ### Step 3: Configure SAP HANA Cloud connection
+    
+    ```bash
+    # Create .env file with your credentials
+    cat > .env << EOL
+    HANA_HOST=your-hana-host.hanacloud.ondemand.com
+    HANA_PORT=443
+    HANA_USER=your_username
+    HANA_PASSWORD=your_password
+    EOL
+    ```
+    
+    ### Step 4: Run with GPU support
+    
+    ```bash
+    docker run --gpus all -p 8000:8000 \
+      --env-file .env \
+      -e GPU_ENABLED=true \
+      -e USE_TENSORRT=true \
+      -e TENSORRT_PRECISION=fp16 \
+      nvcr.io/plturrell/sap-enhanced/langchain-hana-gpu:latest
+    ```
+    
+    ### Step 5: Access the API
+    
+    - API documentation: http://localhost:8000/docs
+    - GPU information: http://localhost:8000/benchmark/gpu_info
+    - Benchmarking: http://localhost:8000/benchmark/tensorrt
+    
+    For complete setup instructions, refer to the VM Setup Guide.
   
   performance: |
     ## Performance
