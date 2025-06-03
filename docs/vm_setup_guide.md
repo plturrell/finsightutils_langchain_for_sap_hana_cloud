@@ -110,7 +110,7 @@ docker run --gpus all -p 8000:8000 \
 
 ## Step 7: Verify Installation
 
-Access the API and check that it's running properly:
+Access the API locally and check that it's running properly:
 
 ```bash
 # Check the health endpoint
@@ -119,6 +119,8 @@ curl http://localhost:8000/health
 # Check GPU information
 curl http://localhost:8000/benchmark/gpu_info
 ```
+
+> **Note**: The API service runs locally in the VM and doesn't require internet exposure. All API interactions happen within the VM environment over localhost (127.0.0.1) or the internal network.
 
 ## Step 8: Run Benchmarks
 

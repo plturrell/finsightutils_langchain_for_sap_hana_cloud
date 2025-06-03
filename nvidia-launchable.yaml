@@ -30,6 +30,8 @@ components:
       ports:
         - containerPort: 8000
           protocol: TCP
+          # Local port only, no internet exposure required
+          expose: false
     resources:
       gpu:
         required: true
