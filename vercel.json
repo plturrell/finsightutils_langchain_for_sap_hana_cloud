@@ -1,0 +1,32 @@
+{
+  "version": 2,
+  "name": "langchain-hana-api",
+  "builds": [
+    {
+      "src": "api/app.py",
+      "use": "@vercel/python",
+      "config": {
+        "runtime": "python3.10",
+        "maxDuration": 60
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/app.py"
+    }
+  ],
+  "env": {
+    "API_HOST": "0.0.0.0",
+    "API_PORT": "8000",
+    "LOG_LEVEL": "INFO",
+    "GPU_ENABLED": "false"
+  },
+  "functions": {
+    "api/app.py": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  }
+}

@@ -1,48 +1,124 @@
-name: CI
+name: CI Pipeline
 
 on:
-  # push:
-  #   branches: [ "main" ]
-  # pull_request:
-  #   branches: [ "main" ]
-  workflow_dispatch: 
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to run tests against'
+        type: environment
+        required: true
+        default: 'development'
 
 jobs:
-  build-and-test:
+  lint:
     runs-on: ubuntu-latest
-
-    # The 'env:' block at the job level makes these variables available in all steps.
-    env:
-      HANA_DB_ADDRESS: ${{ secrets.HANA_DB_ADDRESS }}
-      HANA_DB_PORT: ${{ secrets.HANA_DB_PORT }}
-      HANA_DB_USER: ${{ secrets.HANA_DB_USER }}
-      HANA_DB_PASSWORD: ${{ secrets.HANA_DB_PASSWORD }}
-      HANA_DB_EMBEDDING_MODEL_ID: ${{ secrets.HANA_DB_EMBEDDING_MODEL_ID }}
-
-
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v3
-
+      - uses: actions/checkout@v3
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy
+          pip install -e .
+      
+      - name: Lint with ruff
+        run: |
+          ruff check .
+      
+      - name: Type check with mypy
+        run: |
+          mypy langchain_hana/
 
-      - name: Upgrade pip
-        run: pip install --upgrade pip
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pytest-asyncio pytest-socket
+          pip install -e .
+      
+      - name: Run unit tests
+        run: |
+          pytest tests/unit_tests/ --cov=langchain_hana
 
-      - name: Install main dependencies
-        run: pip install .
+  build-package:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build wheel twine
+      
+      - name: Build package
+        run: |
+          python -m build
+      
+      - name: Check package
+        run: |
+          twine check dist/*
+      
+      - name: Upload distribution package
+        uses: actions/upload-artifact@v3
+        with:
+          name: python-package-distributions
+          path: dist/
 
-      - name: Install test dependencies
-        run: pip install pytest pytest-asyncio pytest-socket pytest-watcher langchain-tests
-
-      - name: Run Unit Tests
-        id: unit_tests
-        run: pytest tests/unit_tests/
-
-      - name: Run Integration Tests
-        id: integration_tests
-        run: pytest tests/integration_tests/
-
+  build-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./api
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/${{ github.repository }}/langchain-hana-api:latest
+            ghcr.io/${{ github.repository }}/langchain-hana-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

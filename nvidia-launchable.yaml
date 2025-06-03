@@ -1,0 +1,151 @@
+name: SAP HANA Cloud LangChain Integration with GPU Acceleration
+version: 1.0.2
+organization: plturrell
+collection: sap-enhanced
+description: FastAPI service for SAP HANA Cloud vector store operations with NVIDIA GPU acceleration and TensorRT optimization
+
+license: Apache-2.0
+maintainer: plturrell@github.com
+supportContact: support@example.com
+supportUrl: https://github.com/plturrell/langchain-integration-for-sap-hana-cloud/issues
+
+container:
+  image: nvcr.io/plturrell/sap-enhanced/langchain-hana-gpu:latest
+
+labels:
+  - langchain
+  - sap-hana
+  - vector-store
+  - gpu-acceleration
+  - tensorrt
+  - embeddings
+  - large-language-models
+
+components:
+  - name: api-server
+    type: service
+    container:
+      image: nvcr.io/plturrell/sap-enhanced/langchain-hana-gpu:latest
+      ports:
+        - containerPort: 8000
+          protocol: TCP
+    resources:
+      gpu:
+        required: true
+        count: 1
+        productFamily: ["Tesla", "Quadro", "RTX", "A100", "H100"]
+      memory:
+        min: 8Gi
+        recommended: 16Gi
+      cpu:
+        min: 2
+        recommended: 4
+
+documentation:
+  overview: |
+    # SAP HANA Cloud LangChain Integration with GPU Acceleration
+    
+    This application provides GPU-accelerated vector operations for SAP HANA Cloud, 
+    enabling efficient semantic search and retrieval with LLM-powered embeddings.
+    
+    ## Key Features
+    
+    - TensorRT optimization for maximum inference speed
+    - Multi-GPU load balancing for high throughput
+    - Dynamic batch sizing based on GPU memory
+    - Memory optimization for large operations
+    - Comprehensive benchmarking tools
+  
+  quickStart: |
+    ## Quick Start
+    
+    1. Pull the container:
+       ```bash
+       docker pull nvcr.io/plturrell/sap-enhanced/langchain-hana-gpu:latest
+       ```
+    
+    2. Run with GPU support:
+       ```bash
+       docker run --gpus all -p 8000:8000 \
+         -e HANA_HOST=your-hana-host \
+         -e HANA_PORT=your-hana-port \
+         -e HANA_USER=your-hana-user \
+         -e HANA_PASSWORD=your-hana-password \
+         -e GPU_ENABLED=true \
+         -e USE_TENSORRT=true \
+         nvcr.io/plturrell/sap-enhanced/langchain-hana-gpu:latest
+       ```
+    
+    3. Access the API:
+       - API documentation: http://localhost:8000/docs
+       - GPU information: http://localhost:8000/benchmark/gpu_info
+  
+  performance: |
+    ## Performance
+    
+    This solution leverages NVIDIA GPUs to accelerate embedding generation and vector operations:
+    
+    - TensorRT optimization provides up to 3x faster inference compared to standard PyTorch
+    - FP16 precision on Ampere GPUs delivers optimal performance-accuracy balance
+    - Dynamic batch sizing automatically adjusts for maximum throughput
+    - Multi-GPU scaling shows near-linear performance improvement
+    
+    ### Benchmarking
+    
+    Run the built-in benchmark:
+    ```bash
+    curl -X POST "http://localhost:8000/benchmark/tensorrt" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model_name": "all-MiniLM-L6-v2",
+        "precision": "fp16",
+        "batch_sizes": [1, 8, 32, 64, 128],
+        "input_length": 128,
+        "iterations": 100
+      }'
+    ```
+
+requirements:
+  gpu:
+    cuda: ">=11.8"
+    driver: ">=520.0"
+    tensorRT: ">=8.6.0"
+  software:
+    docker: ">=20.10.0"
+    nvidia-container-toolkit: ">=1.14.0"
+
+environment:
+  variables:
+    - name: HANA_HOST
+      description: SAP HANA Cloud host
+      required: true
+    - name: HANA_PORT
+      description: SAP HANA Cloud port
+      required: true
+      defaultValue: "443"
+    - name: HANA_USER
+      description: SAP HANA Cloud username
+      required: true
+    - name: HANA_PASSWORD
+      description: SAP HANA Cloud password
+      required: true
+    - name: GPU_ENABLED
+      description: Enable GPU acceleration
+      required: false
+      defaultValue: "true"
+    - name: USE_TENSORRT
+      description: Enable TensorRT optimization
+      required: false
+      defaultValue: "true"
+    - name: TENSORRT_PRECISION
+      description: TensorRT precision (fp16, fp32)
+      required: false
+      defaultValue: "fp16"
+
+relatedSolutions:
+  - name: NVIDIA NeMo
+    url: https://developer.nvidia.com/nemo
+  - name: NVIDIA TensorRT
+    url: https://developer.nvidia.com/tensorrt
+  - name: LangChain
+    url: https://www.langchain.com/

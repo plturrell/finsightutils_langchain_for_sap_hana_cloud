@@ -1,0 +1,125 @@
+name: CD Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        type: environment
+        required: true
+        default: 'production'
+
+jobs:
+  publish-package:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build wheel twine
+      
+      - name: Build package
+        run: |
+          python -m build
+      
+      - name: Check package
+        run: |
+          twine check dist/*
+      
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+          verbose: true
+          print-hash: true
+
+  deploy-api:
+    runs-on: ubuntu-latest
+    needs: publish-package
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/${{ github.repository }}/langchain-hana-api
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+            type=raw,value=latest
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./api
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-to-cloud:
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      # This step can be customized based on your cloud provider (AWS, Azure, GCP, etc.)
+      - name: Set up cloud CLI
+        run: |
+          echo "Setting up cloud deployment"
+          # Install cloud CLI tools here
+      
+      # Example for Kubernetes deployment
+      - name: Deploy to Kubernetes
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+          NAMESPACE: langchain-hana
+        run: |
+          # Example Kubernetes deployment
+          echo "$KUBE_CONFIG" > kubeconfig.yaml
+          export KUBECONFIG=kubeconfig.yaml
+          
+          # Apply Kubernetes manifests
+          # kubectl apply -f k8s/deployment.yaml -n $NAMESPACE
+          # kubectl apply -f k8s/service.yaml -n $NAMESPACE
+          
+          echo "Deployment to cloud completed"
+          # Clean up sensitive files
+          rm kubeconfig.yaml
+      
+      # Notify deployment completion
+      - name: Notify deployment
+        run: |
+          echo "Deployment completed successfully"

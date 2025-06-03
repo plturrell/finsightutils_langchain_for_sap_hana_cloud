@@ -1,0 +1,14 @@
+# TensorRT optimization requirements
+# These are separate because TensorRT installation can be complex
+# and may require specific versions depending on the CUDA version
+
+# Base GPU requirements (already in main requirements.txt)
+torch>=2.1.0
+sentence-transformers>=2.2.2
+nvidia-ml-py>=12.535.77
+
+# TensorRT requirements
+# Note: For a production environment, it's recommended to install
+# TensorRT from NVIDIA's package repositories or NGC container
+tensorrt>=8.6.0
+torch-tensorrt>=1.4.0

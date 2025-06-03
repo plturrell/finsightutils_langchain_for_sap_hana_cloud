@@ -1,0 +1,60 @@
+# Use NGC PyTorch container with TensorRT as base
+FROM nvcr.io/nvidia/pytorch:23.12-py3
+
+LABEL maintainer="plturrell@github.com"
+LABEL org.opencontainers.image.title="SAP HANA Cloud LangChain Integration with GPU Acceleration"
+LABEL org.opencontainers.image.description="FastAPI service for SAP HANA Cloud vector store operations with NVIDIA GPU acceleration and TensorRT optimization"
+LABEL org.opencontainers.image.vendor="SAP Enhanced"
+LABEL org.opencontainers.image.version="1.0.2"
+LABEL org.opencontainers.image.source="https://github.com/plturrell/langchain-integration-for-sap-hana-cloud"
+
+# Set up environment
+ENV PYTHONFAULTHANDLER=1 \
+    PYTHONHASHSEED=random \
+    PYTHONUNBUFFERED=1 \
+    GPU_ENABLED=true \
+    USE_TENSORRT=true \
+    TENSORRT_PRECISION=fp16 \
+    TENSORRT_CACHE_DIR=/app/tensorrt_cache \
+    LOG_LEVEL=INFO
+
+WORKDIR /app
+
+# Copy requirements files
+COPY requirements.txt requirements-tensorrt.txt ./
+
+# Install dependencies
+RUN pip3 install --no-cache-dir -r requirements.txt && \
+    # Install TensorRT dependencies that are compatible with the NGC container
+    pip3 install --no-cache-dir torch-tensorrt && \
+    # Create cache directory for TensorRT engines
+    mkdir -p /app/tensorrt_cache && \
+    chmod 777 /app/tensorrt_cache
+
+# Copy application code
+COPY . .
+
+# Pre-warm TensorRT models
+RUN python3 -c "from embeddings_tensorrt import TensorRTEmbeddings; \
+    model = TensorRTEmbeddings(model_name='all-MiniLM-L6-v2', use_tensorrt=True); \
+    model.embed_query('This is a warmup text to compile TensorRT engines');"
+
+# Create non-root user for security
+RUN useradd -m appuser && \
+    chown -R appuser:appuser /app /app/tensorrt_cache
+
+USER appuser
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/benchmark/gpu_info || exit 1
+
+# Expose port
+EXPOSE 8000
+
+# Start script that checks for GPU and appropriate configuration
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# Run the application
+CMD ["/app/start.sh"]

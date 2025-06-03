@@ -26,9 +26,9 @@ pip install -U langchain-hana
 
 The `HanaDB` class is used to connect to SAP HANA Cloud Vector Engine.
 
-> **Important**:  You can use any embedding class that inherits from `langchain_core.embeddings.Embeddings`—**including** `HanaInternalEmbeddings`, which runs SAP HANA’s `VECTOR_EMBEDDING()` function internally. See [SAP Help](https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-vector-engine-guide/vector-embedding-function-vector?locale=en-US) for more details.
+> **Important**:  You can use any embedding class that inherits from `langchain_core.embeddings.Embeddings`—**including** `HanaInternalEmbeddings`, which runs SAP HANA's `VECTOR_EMBEDDING()` function internally. See [SAP Help](https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-vector-engine-guide/vector-embedding-function-vector?locale=en-US) for more details.
 
-Here’s how to set up the connection and initialize the vector store:
+Here's how to set up the connection and initialize the vector store:
 
 ```python
 from langchain_hana import HanaDB, HanaInternalEmbeddings
@@ -54,9 +54,99 @@ vectorstore = HanaDB(
     embeddings=internal_emb,  # or external_emb
     table_name="<table_name>"  # Optional: Default is "EMBEDDINGS"
 )
-
 ```
 
+## FastAPI Integration with Advanced NVIDIA GPU Acceleration
+
+This repository includes a production-ready FastAPI application for SAP HANA Cloud vector store operations in the `api/` directory. The API provides endpoints for all vector store operations with proper error handling and logging, and includes advanced NVIDIA GPU acceleration for high-performance embedding and vector operations.
+
+### API Features
+
+- Secure connection to SAP HANA Cloud
+- Vector store operations (add, query, delete)
+- Similarity search with filtering
+- Max Marginal Relevance (MMR) search
+- **Advanced NVIDIA GPU Acceleration** for embeddings and vector operations
+- Automatic GPU detection with CPU fallback
+- Docker support for easy deployment
+- Performance benchmarking tools
+
+### Advanced GPU Acceleration
+
+The API includes sophisticated GPU acceleration features:
+
+- **Multi-GPU Load Balancing**: Automatically distributes workloads across all available GPUs
+- **Dynamic Batch Size Adjustment**: Optimizes batch sizes based on available GPU memory
+- **Memory Optimization**: Advanced techniques for handling large embedding operations
+- **Performance Benchmarking**: Built-in tools to compare CPU vs GPU performance
+
+These features ensure maximum performance by:
+
+- Embedding generation using sentence-transformers models
+- Maximal Marginal Relevance calculations with CuPy
+- Optimized batch processing for GPU efficiency
+- Hybrid embedding mode (GPU + HANA internal)
+
+### Running the API
+
+```bash
+# Navigate to the API directory
+cd api
+
+# Copy and configure environment variables
+cp .env.example .env
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the API
+uvicorn app:app --reload
+```
+
+For production deployment, use the provided Docker configuration:
+
+```bash
+# Build and run with Docker Compose (CPU mode)
+docker-compose up -d
+
+# Build and run with GPU acceleration
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+```
+
+For more details, see the [API README](api/README.md).
+
+## Performance Considerations
+
+When using GPU acceleration:
+
+1. **Batch Size**: Adjust the `GPU_BATCH_SIZE` parameter in the API config to optimize for your GPU memory and performance needs
+2. **Embedding Models**: Choose the appropriate embedding model based on your quality vs. performance tradeoff
+3. **Hybrid Mode**: The API supports using both GPU acceleration and HANA's internal embedding capabilities
+
+## Development and CI/CD
+
+This project includes a complete CI/CD pipeline for automated testing, building, and deployment:
+
+- GitHub Actions workflows for CI/CD pipelines
+- Pre-commit hooks for code quality
+- Automated testing across multiple Python versions
+- Container building and publishing
+- Automated deployment to cloud environments
+
+For developers, we recommend setting up the local development environment:
+
+```bash
+# Set up local development environment with pre-commit hooks
+./scripts/setup_local_dev.sh
+```
+
+This setup script will:
+1. Install pre-commit hooks and development dependencies
+2. Configure git remotes for both the main SAP repository and @plturrell's SAP OpenSource Enhanced repository
+3. Set up automatic synchronization between both repositories
+4. Install the tag-and-release script for easy version management
+
+For detailed information about the CI/CD setup, see our [CI/CD Guide](docs/cicd_guide.md).
 
 ## Support, Feedback, Contributing
 
