@@ -3,8 +3,8 @@
   "name": "langchain-hana-api",
   "builds": [
     {
-      "src": "api/vercel_handler.py",
-      "use": "@vercel/python",
+      "src": "api/index.py",
+      "use": "@vercel/python@3.1.0",
       "config": {
         "runtime": "python3.10",
         "maxDuration": 60
@@ -14,43 +14,43 @@
   "routes": [
     {
       "src": "/docs",
-      "dest": "api/vercel_handler.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/openapi.json",
-      "dest": "api/vercel_handler.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/texts",
       "methods": ["POST"],
-      "dest": "api/vercel_handler.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/query",
       "methods": ["POST"],
-      "dest": "api/vercel_handler.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/query/vector",
       "methods": ["POST"],
-      "dest": "api/vercel_handler.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/delete",
       "methods": ["POST"],
-      "dest": "api/vercel_handler.py"
+      "dest": "api/index.py"
     },
     {
-      "src": "/benchmark/.*",
-      "dest": "api/vercel_handler.py"
+      "src": "/benchmark/(.*)",
+      "dest": "api/index.py"
     },
     {
       "src": "/__health",
-      "dest": "api/vercel_handler.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/(.*)",
-      "dest": "api/vercel_handler.py"
+      "dest": "api/index.py"
     }
   ],
   "env": {
@@ -60,11 +60,5 @@
     "GPU_ENABLED": "false",
     "USE_INTERNAL_EMBEDDINGS": "false",
     "EMBEDDING_MODEL": "all-MiniLM-L6-v2"
-  },
-  "functions": {
-    "api/vercel_handler.py": {
-      "memory": 1024,
-      "maxDuration": 60
-    }
   }
 }
