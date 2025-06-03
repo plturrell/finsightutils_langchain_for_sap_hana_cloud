@@ -10,6 +10,29 @@ This guide provides detailed instructions for setting up the SAP HANA Cloud Lang
 - Internet access for container pulls
 - SAP HANA Cloud instance credentials
 
+## Compute Requirements
+
+### Minimum Requirements
+- **GPU**: 1x NVIDIA GPU with 8GB+ VRAM (Tesla T4 or better)
+- **CPU**: 4 CPU cores
+- **Memory**: 8GB RAM
+- **Storage**: 20GB available disk space
+- **CUDA**: Version 11.8 or higher
+
+### Recommended Configuration
+- **GPU**: 1x NVIDIA GPU with 16GB+ VRAM (A10, RTX A4000, or better)
+- **CPU**: 8 CPU cores
+- **Memory**: 16GB RAM
+- **Storage**: 50GB available disk space
+- **CUDA**: Version 12.0 or higher
+
+### High-Performance Configuration
+- **GPU**: Multiple NVIDIA GPUs or 1x A100/H100
+- **CPU**: 16+ CPU cores
+- **Memory**: 32GB+ RAM
+- **Storage**: 100GB+ SSD storage
+- **Network**: High-speed connection to SAP HANA Cloud
+
 ## Step 1: Install NVIDIA Drivers and CUDA
 
 If not already installed, set up NVIDIA drivers and CUDA:

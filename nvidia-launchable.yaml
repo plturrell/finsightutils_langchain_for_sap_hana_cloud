@@ -37,12 +37,16 @@ components:
         required: true
         count: 1
         productFamily: ["Tesla", "Quadro", "RTX", "A100", "H100"]
+        memory: 16Gi
       memory:
         min: 8Gi
         recommended: 16Gi
       cpu:
-        min: 2
-        recommended: 4
+        min: 4
+        recommended: 8
+      storage:
+        min: 20Gi
+        recommended: 50Gi
 
 documentation:
   overview: |
