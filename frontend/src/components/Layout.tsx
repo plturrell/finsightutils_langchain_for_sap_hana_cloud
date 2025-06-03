@@ -34,6 +34,7 @@ import {
   LightMode as LightModeIcon,
   Notifications as NotificationsIcon,
   Help as HelpIcon,
+  AccountTree as AccountTreeIcon,
 } from '@mui/icons-material';
 import SAPLogo from './SAPLogo';
 
@@ -43,6 +44,7 @@ const navItems = [
   { name: 'Dashboard', path: '/', icon: <DashboardIcon /> },
   { name: 'Vector Search', path: '/search', icon: <SearchIcon /> },
   { name: 'Benchmarks', path: '/benchmark', icon: <SpeedIcon /> },
+  { name: 'Visual Developer', path: '/developer', icon: <AccountTreeIcon /> },
   { name: 'Settings', path: '/settings', icon: <SettingsIcon /> },
 ];
 

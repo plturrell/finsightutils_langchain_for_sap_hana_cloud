@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Search from './pages/Search';
 import Benchmark from './pages/Benchmark';
 import Settings from './pages/Settings';
+import Developer from './pages/Developer';
 import Layout from './components/Layout';
 
 const App: React.FC = () => {
@@ -17,6 +18,7 @@ const App: React.FC = () => {
             <Route path="search" element={<Search />} />
             <Route path="benchmark" element={<Benchmark />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="developer" element={<Developer />} />
           </Route>
         </Routes>
       </Box>
