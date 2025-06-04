@@ -29,6 +29,13 @@ try:
 except ImportError:
     DEBUG_HANDLER_AVAILABLE = False
 
+# Import timeout manager
+try:
+    from api.timeout_manager import get_timeout, get_all_timeouts
+    TIMEOUT_MANAGER_AVAILABLE = True
+except ImportError:
+    TIMEOUT_MANAGER_AVAILABLE = False
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,14 +45,16 @@ T4_GPU_BACKEND_URL = os.getenv("T4_GPU_BACKEND_URL", "https://jupyter0-513syzm60
 JWT_SECRET = os.getenv("JWT_SECRET", "sap-hana-langchain-t4-integration-secret-key-2025")  # Should be set in environment variables
 VERCEL_URL = os.getenv("VERCEL_URL", "")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "30"))
 
 # Function to handle backend request exceptions
-def handle_backend_exception(e):
+def handle_backend_exception(e, endpoint_path=None):
     """
     Handles backend request exceptions with more user-friendly error messages
     
     Args:
         e: The exception to handle
+        endpoint_path: Optional path of the endpoint being called
         
     Returns:
         HTTPException with appropriate status code and detailed message
@@ -56,12 +65,38 @@ def handle_backend_exception(e):
     error_detail = str(e)
     status_code = 503
     
+    # Get timeout information if available
+    timeout_info = ""
+    if TIMEOUT_MANAGER_AVAILABLE and endpoint_path:
+        timeout_value = get_timeout(endpoint_path)
+        timeout_info = f" The request timed out after {timeout_value} seconds."
+    
     # Check if the error is a timeout
-    if "timeout" in error_detail.lower():
-        error_detail = f"Backend service timed out. This may be because the T4 GPU is initializing or under heavy load. Please try again in a few moments."
+    if "timeout" in error_detail.lower() or isinstance(e, requests.exceptions.Timeout):
+        error_detail = f"Backend service timed out.{timeout_info} This may be because the T4 GPU is initializing or under heavy load. Please try again in a few moments."
+        status_code = 504  # Gateway Timeout
+    
     # Check if the error is a connection error
-    elif "connection" in error_detail.lower() or "connectederror" in error_detail.lower():
+    elif ("connection" in error_detail.lower() or 
+          "connectederror" in error_detail.lower() or 
+          isinstance(e, requests.exceptions.ConnectionError)):
         error_detail = f"Unable to connect to the T4 GPU backend. The backend service may be down or unreachable. Please verify the backend URL: {T4_GPU_BACKEND_URL}"
+    
+    # Check if the error is a DNS resolution error
+    elif "gaierror" in error_detail.lower() or "name or service not known" in error_detail.lower():
+        error_detail = f"DNS resolution failed for the T4 GPU backend. The hostname could not be resolved. Please check if the backend URL is correct: {T4_GPU_BACKEND_URL}"
+    
+    # Check for SSL/TLS errors
+    elif "ssl" in error_detail.lower() or "certificate" in error_detail.lower():
+        error_detail = f"SSL/TLS error when connecting to the T4 GPU backend. This could be due to certificate validation issues."
+    
+    # Check for proxy issues
+    elif "proxy" in error_detail.lower():
+        error_detail = f"Proxy error when connecting to the T4 GPU backend. This could be due to incorrect proxy configuration or network restrictions."
+    
+    # Add debug information for development environments
+    if ENVIRONMENT != "production":
+        error_detail += f"\n\nDebug information: {type(e).__name__}: {str(e)}"
     
     return HTTPException(
         status_code=status_code,
@@ -287,12 +322,16 @@ async def generate_embeddings(
         if ENVIRONMENT == "production" and not current_user:
             raise HTTPException(status_code=401, detail="Authentication required")
         
+        # Get appropriate timeout for embeddings endpoint
+        timeout_value = get_timeout("embeddings") if TIMEOUT_MANAGER_AVAILABLE else DEFAULT_TIMEOUT
+        logger.debug(f"Using timeout of {timeout_value}s for embeddings endpoint")
+        
         # Forward request to backend
         # Use model_dump instead of dict() for newer Pydantic compatibility
         response = requests.post(
             f"{T4_GPU_BACKEND_URL}/api/embeddings",
             json=request.model_dump() if hasattr(request, 'model_dump') else request.dict(),
-            timeout=30
+            timeout=timeout_value
         )
         
         # Handle errors
@@ -305,7 +344,7 @@ async def generate_embeddings(
         # Return response
         return response.json()
     except requests.RequestException as e:
-        raise handle_backend_exception(e)
+        raise handle_backend_exception(e, "embeddings")
 
 @app.post("/api/vectorstore/search", response_model=SearchResponse)
 async def search(
@@ -318,12 +357,16 @@ async def search(
         if ENVIRONMENT == "production" and not current_user:
             raise HTTPException(status_code=401, detail="Authentication required")
         
+        # Get appropriate timeout for search endpoint
+        timeout_value = get_timeout("search") if TIMEOUT_MANAGER_AVAILABLE else DEFAULT_TIMEOUT
+        logger.debug(f"Using timeout of {timeout_value}s for vectorstore/search endpoint")
+        
         # Forward request to backend
         # Use model_dump instead of dict() for newer Pydantic compatibility
         response = requests.post(
             f"{T4_GPU_BACKEND_URL}/api/vectorstore/search",
             json=request.model_dump() if hasattr(request, 'model_dump') else request.dict(),
-            timeout=30
+            timeout=timeout_value
         )
         
         # Handle errors
@@ -336,7 +379,7 @@ async def search(
         # Return response
         return response.json()
     except requests.RequestException as e:
-        raise handle_backend_exception(e)
+        raise handle_backend_exception(e, "search")
 
 @app.post("/api/vectorstore/mmr_search", response_model=SearchResponse)
 async def mmr_search(
@@ -349,12 +392,16 @@ async def mmr_search(
         if ENVIRONMENT == "production" and not current_user:
             raise HTTPException(status_code=401, detail="Authentication required")
         
+        # Get appropriate timeout for MMR search endpoint
+        timeout_value = get_timeout("search") if TIMEOUT_MANAGER_AVAILABLE else DEFAULT_TIMEOUT
+        logger.debug(f"Using timeout of {timeout_value}s for vectorstore/mmr_search endpoint")
+        
         # Forward request to backend
         # Use model_dump instead of dict() for newer Pydantic compatibility
         response = requests.post(
             f"{T4_GPU_BACKEND_URL}/api/vectorstore/mmr_search",
             json=request.model_dump() if hasattr(request, 'model_dump') else request.dict(),
-            timeout=30
+            timeout=timeout_value
         )
         
         # Handle errors
@@ -367,16 +414,20 @@ async def mmr_search(
         # Return response
         return response.json()
     except requests.RequestException as e:
-        raise handle_backend_exception(e)
+        raise handle_backend_exception(e, "mmr_search")
 
 @app.get("/api/health")
 async def health_check():
     """Check health of the API and backend"""
     try:
+        # Get appropriate timeout for health check endpoint
+        timeout_value = get_timeout("health") if TIMEOUT_MANAGER_AVAILABLE else 10
+        logger.debug(f"Using timeout of {timeout_value}s for health check endpoint")
+        
         # Check backend health
         backend_response = requests.get(
             f"{T4_GPU_BACKEND_URL}/api/health",
-            timeout=5
+            timeout=timeout_value
         )
         
         backend_status = "healthy" if backend_response.status_code == 200 else "unhealthy"
@@ -388,7 +439,8 @@ async def health_check():
             "backend": {
                 "status": backend_status,
                 "details": backend_details
-            }
+            },
+            "timeouts": get_all_timeouts() if TIMEOUT_MANAGER_AVAILABLE else {"default": DEFAULT_TIMEOUT}
         }
     except requests.RequestException as e:
         logger.error(f"Backend health check error: {str(e)}")
@@ -398,7 +450,8 @@ async def health_check():
             "backend": {
                 "status": "unreachable",
                 "error": str(e)
-            }
+            },
+            "timeouts": get_all_timeouts() if TIMEOUT_MANAGER_AVAILABLE else {"default": DEFAULT_TIMEOUT}
         }
 
 # Performance metrics endpoint
@@ -410,10 +463,14 @@ async def get_metrics(current_user: Optional[str] = Depends(get_current_user)):
         if ENVIRONMENT == "production" and not current_user:
             raise HTTPException(status_code=401, detail="Authentication required")
         
+        # Get appropriate timeout for metrics endpoint
+        timeout_value = get_timeout("metrics") if TIMEOUT_MANAGER_AVAILABLE else DEFAULT_TIMEOUT
+        logger.debug(f"Using timeout of {timeout_value}s for metrics endpoint")
+        
         # Forward request to backend
         response = requests.get(
             f"{T4_GPU_BACKEND_URL}/api/metrics",
-            timeout=10
+            timeout=timeout_value
         )
         
         # Handle errors
@@ -426,7 +483,7 @@ async def get_metrics(current_user: Optional[str] = Depends(get_current_user)):
         # Return response
         return response.json()
     except requests.RequestException as e:
-        raise handle_backend_exception(e)
+        raise handle_backend_exception(e, "metrics")
 
 # Root route for API information
 @app.get("/api")

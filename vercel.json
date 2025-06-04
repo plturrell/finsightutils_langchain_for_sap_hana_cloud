@@ -2,6 +2,10 @@
   "version": 2,
   "builds": [
     {
+      "src": "api/enhanced_debug_proxy.py",
+      "use": "@vercel/python"
+    },
+    {
       "src": "api/direct_proxy.py",
       "use": "@vercel/python"
     },
@@ -15,6 +19,14 @@
     }
   ],
   "routes": [
+    {
+      "src": "/enhanced-debug",
+      "dest": "api/enhanced_debug_proxy.py"
+    },
+    {
+      "src": "/enhanced-debug/(.*)",
+      "dest": "api/enhanced_debug_proxy.py"
+    },
     {
       "src": "/debug-proxy",
       "dest": "api/direct_proxy.py"
@@ -45,6 +57,17 @@
     "USE_TENSORRT": "true",
     "TENSORRT_PRECISION": "int8",
     "ENABLE_ERROR_CONTEXT": "true",
-    "LOG_LEVEL": "DEBUG"
+    "LOG_LEVEL": "DEBUG",
+    "DEFAULT_TIMEOUT": "30",
+    "HEALTH_CHECK_TIMEOUT": "10",
+    "EMBEDDING_TIMEOUT": "60",
+    "SEARCH_TIMEOUT": "45",
+    "AUTH_TIMEOUT": "15",
+    "CONNECTION_TEST_TIMEOUT": "5",
+    "ENABLE_MEMORY_TRACKING": "true",
+    "ENABLE_DETAILED_LOGGING": "true",
+    "MAX_RETRY_COUNT": "3",
+    "RETRY_DELAY_MS": "1000",
+    "ENABLE_SSL_VERIFICATION": "true"
   }
 }
