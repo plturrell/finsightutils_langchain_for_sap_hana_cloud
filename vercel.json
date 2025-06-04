@@ -1,76 +1,9 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": {
-        "runtime": "python3.9",
-        "maxDuration": 60,
-        "installCommand": "pip install -r api/requirements-vercel.txt"
-      }
-    },
-    {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "build"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/docs",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/api/openapi.json",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/api/texts",
-      "methods": ["POST"],
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/api/query",
-      "methods": ["POST"],
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/api/query/vector",
-      "methods": ["POST"],
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/api/delete",
-      "methods": ["POST"],
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/api/benchmark/(.*)",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/api/developer/(.*)",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/api/debug/(.*)",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/api/health",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "frontend/$1"
-    }
+  "buildCommand": "cd api && pip install -r requirements-vercel.txt && cd ../frontend && npm install && CI=false npm run build",
+  "outputDirectory": "frontend/build",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.py" }
   ],
   "env": {
     "API_HOST": "0.0.0.0",
