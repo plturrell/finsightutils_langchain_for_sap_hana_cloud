@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "cd api && pip install -r requirements-vercel.txt && cd ../frontend && npm install && CI=false npm run build",
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": "frontend/build",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.py" }

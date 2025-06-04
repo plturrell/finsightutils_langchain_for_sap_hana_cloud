@@ -1,0 +1,12 @@
+{
+  "name": "langchain-hana-enterprise",
+  "version": "1.2.0",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm install && CI=false npm run build",
+    "vercel-build": "cd frontend && npm install && CI=false npm run build"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
