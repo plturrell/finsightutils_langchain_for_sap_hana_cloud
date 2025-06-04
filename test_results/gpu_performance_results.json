@@ -1,0 +1,51 @@
+{
+  "status": "partial",
+  "tests": {
+    "batch_performance": {
+      "status": "partial",
+      "batch_results": {
+        "1": {
+          "status": "simulated",
+          "gpu_time_ms": 10.18751567146817,
+          "cpu_time_ms": 54.330747457486915,
+          "speedup": 5.3330713011464805,
+          "texts_per_second_gpu": 98.15935820355753,
+          "texts_per_second_cpu": 18.40578395838354,
+          "error": "Expecting value: line 1 column 1 (char 0)"
+        },
+        "8": {
+          "status": "simulated",
+          "gpu_time_ms": 95.65838821535954,
+          "cpu_time_ms": 335.13241709109235,
+          "speedup": 3.5034294779940827,
+          "texts_per_second_gpu": 83.63093032666703,
+          "texts_per_second_cpu": 23.871161344041273,
+          "error": "Expecting value: line 1 column 1 (char 0)"
+        }
+      },
+      "optimal_batch_size": 1
+    },
+    "memory_usage": {
+      "status": "simulated",
+      "memory_info": {
+        "total_mb": 16384,
+        "used_mb": 2048,
+        "free_mb": 14336,
+        "utilization_pct": 12.5
+      },
+      "error": "Expecting value: line 1 column 1 (char 0)"
+    },
+    "mmr_performance": {
+      "status": "simulated",
+      "gpu_time_ms": 127.49854870741237,
+      "cpu_time_ms": 497.5731575253992,
+      "speedup": 3.902578990661655,
+      "error": "Expecting value: line 1 column 1 (char 0)"
+    }
+  },
+  "summary": {
+    "optimal_batch_size": 1,
+    "average_gpu_speedup": 4.418250389570281,
+    "mmr_speedup": 3.902578990661655
+  }
+}

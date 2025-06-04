@@ -73,7 +73,7 @@
     }
   ],
   "env": {
-    "T4_GPU_BACKEND_URL": "https://jupyter0-4ckg1m6x0.brevlab.com",
+    "T4_GPU_BACKEND_URL": "https://jupyter0-513syzm60.brevlab.com",
     "ENVIRONMENT": "development",
     "JWT_SECRET": "sap-hana-langchain-t4-integration-secret-key-2025",
     "ENABLE_CORS": "true",

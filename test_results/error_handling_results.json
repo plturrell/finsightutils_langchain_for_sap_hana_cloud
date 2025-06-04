@@ -1,0 +1,29 @@
+{
+  "status": "partial",
+  "tests": {
+    "invalid_model": {
+      "status": "failure",
+      "response_code": 200,
+      "response": "<!DOCTYPE html>\n<html>\n  <head>\n    <title>Sign in \u00e3\u0083\u00bb Cloudflare Access</title>\n    <meta charset=\"utf-8\" />\n    <meta name=\"robots\" content=\"noindex\" />\n    <meta name=\"viewport\" content=\"initial-scale=1, maximum-scale=1, user-scalable=no, width=device-width\" />\n    <article id=\"data\"\n      data-auto-redirect-to-identity=\"true\"\n      data-auto-redirect-url=\"https:&#x2F;&#x2F;login.nvidia.com&#x2F;authorize?client_id&#x3D;YBXM-8MEXR9j3x5XYsYHpoiF4Y34B3OCn9t34n2LQh8&amp;domain&#x3D;YBXM-8MEXR9j3",
+      "has_error_details": false
+    },
+    "excessive_batch": {
+      "status": "failure",
+      "response_code": 200,
+      "response": "<!DOCTYPE html>\n<html>\n  <head>\n    <title>Sign in \u00e3\u0083\u00bb Cloudflare Access</title>\n    <meta charset=\"utf-8\" />\n    <meta name=\"robots\" content=\"noindex\" />\n    <meta name=\"viewport\" content=\"initial-scale=1, maximum-scale=1, user-scalable=no, width=device-width\" />\n    <article id=\"data\"\n      data-auto-redirect-to-identity=\"true\"\n      data-auto-redirect-url=\"https:&#x2F;&#x2F;login.nvidia.com&#x2F;authorize?client_id&#x3D;YBXM-8MEXR9j3x5XYsYHpoiF4Y34B3OCn9t34n2LQh8&amp;domain&#x3D;YBXM-8MEXR9j3",
+      "has_fallback_info": false
+    },
+    "invalid_filter": {
+      "status": "failure",
+      "response_code": 200,
+      "response": "<!DOCTYPE html>\n<html>\n  <head>\n    <title>Sign in \u00e3\u0083\u00bb Cloudflare Access</title>\n    <meta charset=\"utf-8\" />\n    <meta name=\"robots\" content=\"noindex\" />\n    <meta name=\"viewport\" content=\"initial-scale=1, maximum-scale=1, user-scalable=no, width=device-width\" />\n    <article id=\"data\"\n      data-auto-redirect-to-identity=\"true\"\n      data-auto-redirect-url=\"https:&#x2F;&#x2F;login.nvidia.com&#x2F;authorize?client_id&#x3D;YBXM-8MEXR9j3x5XYsYHpoiF4Y34B3OCn9t34n2LQh8&amp;domain&#x3D;YBXM-8MEXR9j3",
+      "has_error_details": false
+    },
+    "non_existent_table": {
+      "status": "failure",
+      "response_code": 200,
+      "response": "<!DOCTYPE html>\n<html>\n  <head>\n    <title>Sign in \u00e3\u0083\u00bb Cloudflare Access</title>\n    <meta charset=\"utf-8\" />\n    <meta name=\"robots\" content=\"noindex\" />\n    <meta name=\"viewport\" content=\"initial-scale=1, maximum-scale=1, user-scalable=no, width=device-width\" />\n    <article id=\"data\"\n      data-auto-redirect-to-identity=\"true\"\n      data-auto-redirect-url=\"https:&#x2F;&#x2F;login.nvidia.com&#x2F;authorize?client_id&#x3D;YBXM-8MEXR9j3x5XYsYHpoiF4Y34B3OCn9t34n2LQh8&amp;domain&#x3D;YBXM-8MEXR9j3",
+      "has_error_details": true
+    }
+  }
+}

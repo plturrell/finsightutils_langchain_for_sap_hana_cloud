@@ -1,0 +1,162 @@
+[
+  {
+    "page_content": "This is test document 0 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_0",
+      "category": "technical",
+      "relevance": 5
+    }
+  },
+  {
+    "page_content": "This is test document 1 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_1",
+      "category": "business",
+      "relevance": 8
+    }
+  },
+  {
+    "page_content": "This is test document 2 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_2",
+      "category": "business",
+      "relevance": 2
+    }
+  },
+  {
+    "page_content": "This is test document 3 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_3",
+      "category": "business",
+      "relevance": 8
+    }
+  },
+  {
+    "page_content": "This is test document 4 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_4",
+      "category": "technical",
+      "relevance": 6
+    }
+  },
+  {
+    "page_content": "This is test document 5 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_5",
+      "category": "technical",
+      "relevance": 9
+    }
+  },
+  {
+    "page_content": "This is test document 6 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_6",
+      "category": "business",
+      "relevance": 3
+    }
+  },
+  {
+    "page_content": "This is test document 7 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_7",
+      "category": "technical",
+      "relevance": 2
+    }
+  },
+  {
+    "page_content": "This is test document 8 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_8",
+      "category": "business",
+      "relevance": 6
+    }
+  },
+  {
+    "page_content": "This is test document 9 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_9",
+      "category": "technical",
+      "relevance": 8
+    }
+  },
+  {
+    "page_content": "This is test document 10 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_10",
+      "category": "business",
+      "relevance": 7
+    }
+  },
+  {
+    "page_content": "This is test document 11 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_11",
+      "category": "business",
+      "relevance": 4
+    }
+  },
+  {
+    "page_content": "This is test document 12 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_12",
+      "category": "technical",
+      "relevance": 6
+    }
+  },
+  {
+    "page_content": "This is test document 13 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_13",
+      "category": "technical",
+      "relevance": 9
+    }
+  },
+  {
+    "page_content": "This is test document 14 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_14",
+      "category": "business",
+      "relevance": 9
+    }
+  },
+  {
+    "page_content": "This is test document 15 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_15",
+      "category": "technical",
+      "relevance": 9
+    }
+  },
+  {
+    "page_content": "This is test document 16 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_16",
+      "category": "technical",
+      "relevance": 7
+    }
+  },
+  {
+    "page_content": "This is test document 17 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_17",
+      "category": "technical",
+      "relevance": 8
+    }
+  },
+  {
+    "page_content": "This is test document 18 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_18",
+      "category": "business",
+      "relevance": 3
+    }
+  },
+  {
+    "page_content": "This is test document 19 about SAP HANA Cloud and LangChain integration.",
+    "metadata": {
+      "id": "doc_19",
+      "category": "business",
+      "relevance": 9
+    }
+  }
+]

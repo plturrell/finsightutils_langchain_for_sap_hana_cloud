@@ -72,8 +72,12 @@ This integration provides powerful advanced capabilities:
 - **Internal Embeddings**: Leverage SAP HANA's built-in embedding functions
 - **Accurate Similarity Scoring**: Get precise vector similarity measurements for better ranking
 - **Context-Aware Error Handling**: Detailed error messages with suggested fixes for common issues
+- **GPU Acceleration**: High-performance embedding generation with NVIDIA GPU support
+- **Dynamic Batch Processing**: Memory-aware batch sizing for optimal GPU throughput
+- **TensorRT Optimization**: Accelerated inference with TensorRT engine compilation
+- **Mixed Precision Support**: FP32, FP16, and INT8 precision options for optimal performance
 
-For details on these and other advanced features, see our [Advanced Features Guide](docs/advanced_features.md).
+For details on these and other advanced features, see our [Advanced Features Guide](docs/advanced_features.md) and [GPU Acceleration Guide](docs/gpu_acceleration.md).
 
 ### Intelligent Error Handling
 

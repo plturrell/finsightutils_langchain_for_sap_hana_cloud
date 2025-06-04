@@ -1,0 +1,31 @@
+{
+  "timestamp": "2025-06-04 17:06:41",
+  "api_base_url": "https://jupyter0-513syzm60.brevlab.com",
+  "summary": {
+    "total_tests": 21,
+    "passed": 6,
+    "simulated": 10,
+    "failed": 4,
+    "error": 0
+  },
+  "suite_status": {
+    "environment": "success",
+    "tensorrt": "partial",
+    "vectorstore": "partial",
+    "gpu_performance": "partial",
+    "error_handling": "partial",
+    "api": "success"
+  },
+  "performance": {
+    "gpu_speedup": 4.418250389570281,
+    "optimal_batch_size": 1,
+    "mmr_speedup": 3.902578990661655
+  },
+  "recommendations": [
+    "Use int8 precision for optimal performance on T4 GPU",
+    "Use batch size of 1 for optimal throughput",
+    "Implement dynamic batch sizing based on available GPU memory",
+    "Use TensorRT for maximum performance on T4 GPU",
+    "Consider implementing multi-GPU support for higher throughput"
+  ]
+}

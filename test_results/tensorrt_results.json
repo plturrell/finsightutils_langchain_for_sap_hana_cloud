@@ -1,0 +1,101 @@
+{
+  "status": "partial",
+  "tests": {
+    "engine_creation": {
+      "status": "simulated",
+      "engine_info": {
+        "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+        "precision": "fp16",
+        "engine_path": "/tmp/engines/all-MiniLM-L6-v2_fp16.engine",
+        "creation_time_sec": 120.5,
+        "size_mb": 42.8
+      },
+      "error": "Expecting value: line 1 column 1 (char 0)"
+    },
+    "embedding_generation": {
+      "status": "simulated",
+      "response": {
+        "embeddings": [
+          [
+            0.1,
+            0.2,
+            0.3
+          ],
+          [
+            0.1,
+            0.2,
+            0.3
+          ],
+          [
+            0.1,
+            0.2,
+            0.3
+          ],
+          [
+            0.1,
+            0.2,
+            0.3
+          ],
+          [
+            0.1,
+            0.2,
+            0.3
+          ],
+          [
+            0.1,
+            0.2,
+            0.3
+          ],
+          [
+            0.1,
+            0.2,
+            0.3
+          ],
+          [
+            0.1,
+            0.2,
+            0.3
+          ],
+          [
+            0.1,
+            0.2,
+            0.3
+          ],
+          [
+            0.1,
+            0.2,
+            0.3
+          ]
+        ],
+        "dimensions": 384,
+        "model": "sentence-transformers/all-MiniLM-L6-v2",
+        "processing_time_ms": 150.5,
+        "use_tensorrt": true,
+        "gpu_used": true
+      },
+      "error": "Expecting value: line 1 column 1 (char 0)"
+    },
+    "precision_comparison": {
+      "status": "simulated",
+      "results": {
+        "fp32": {
+          "status": "simulated",
+          "processing_time_ms": 300.0,
+          "error": "Expecting value: line 1 column 1 (char 0)"
+        },
+        "fp16": {
+          "status": "simulated",
+          "processing_time_ms": 150.0,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "speedup": 2.0
+        },
+        "int8": {
+          "status": "simulated",
+          "processing_time_ms": 100.0,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "speedup": 3.0
+        }
+      }
+    }
+  }
+}

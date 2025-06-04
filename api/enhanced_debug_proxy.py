@@ -155,7 +155,7 @@ async def debug_info():
             "platform": sys.platform,
             "python_path": sys.executable,
             "sys_path": sys.path,
-            "env_vars": {k: v for k, v in os.environ.items() if not k.lower().contains("password") and not k.lower().contains("secret")},
+            "env_vars": {k: v for k, v in os.environ.items() if "password" not in k.lower() and "secret" not in k.lower()},
         },
         "timestamp": time.time()
     }

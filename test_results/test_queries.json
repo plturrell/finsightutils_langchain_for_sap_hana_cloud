@@ -1,0 +1,48 @@
+[
+  {
+    "id": "query_0",
+    "text": "Test query 0 about vector search",
+    "options": {
+      "k": 3,
+      "filter": {
+        "category": "technical"
+      }
+    }
+  },
+  {
+    "id": "query_1",
+    "text": "Test query 1 about knowledge graphs",
+    "options": {
+      "k": 3,
+      "filter": null
+    }
+  },
+  {
+    "id": "query_2",
+    "text": "Test query 2 about vector search",
+    "options": {
+      "k": 3,
+      "filter": {
+        "category": "technical"
+      }
+    }
+  },
+  {
+    "id": "query_3",
+    "text": "Test query 3 about knowledge graphs",
+    "options": {
+      "k": 3,
+      "filter": null
+    }
+  },
+  {
+    "id": "query_4",
+    "text": "Test query 4 about vector search",
+    "options": {
+      "k": 3,
+      "filter": {
+        "category": "technical"
+      }
+    }
+  }
+]

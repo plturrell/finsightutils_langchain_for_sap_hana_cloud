@@ -1,0 +1,89 @@
+{
+  "status": "partial",
+  "tests": {
+    "add_documents": {
+      "status": "simulated",
+      "response": {
+        "added": 20,
+        "table_name": "T4_TEST_VECTORS",
+        "processing_time_ms": 2500.5
+      },
+      "error": "Expecting value: line 1 column 1 (char 0)"
+    },
+    "similarity_search": {
+      "status": "simulated",
+      "response": {
+        "query": "Test query 0 about vector search",
+        "results": [
+          {
+            "content": "This is test document 0 about SAP HANA Cloud and LangChain integration.",
+            "metadata": {
+              "id": "doc_0",
+              "category": "technical",
+              "relevance": 5
+            },
+            "score": 0.95
+          },
+          {
+            "content": "This is test document 1 about SAP HANA Cloud and LangChain integration.",
+            "metadata": {
+              "id": "doc_1",
+              "category": "business",
+              "relevance": 8
+            },
+            "score": 0.8999999999999999
+          },
+          {
+            "content": "This is test document 2 about SAP HANA Cloud and LangChain integration.",
+            "metadata": {
+              "id": "doc_2",
+              "category": "business",
+              "relevance": 2
+            },
+            "score": 0.85
+          }
+        ],
+        "processing_time_ms": 150.5
+      },
+      "error": "Expecting value: line 1 column 1 (char 0)"
+    },
+    "mmr_search": {
+      "status": "simulated",
+      "response": {
+        "query": "Test query 0 about vector search",
+        "results": [
+          {
+            "content": "This is test document 0 about SAP HANA Cloud and LangChain integration.",
+            "metadata": {
+              "id": "doc_0",
+              "category": "technical",
+              "relevance": 5
+            },
+            "score": 0.95
+          },
+          {
+            "content": "This is test document 1 about SAP HANA Cloud and LangChain integration.",
+            "metadata": {
+              "id": "doc_1",
+              "category": "business",
+              "relevance": 8
+            },
+            "score": 0.85
+          },
+          {
+            "content": "This is test document 2 about SAP HANA Cloud and LangChain integration.",
+            "metadata": {
+              "id": "doc_2",
+              "category": "business",
+              "relevance": 2
+            },
+            "score": 0.75
+          }
+        ],
+        "processing_time_ms": 250.5,
+        "lambda_mult": 0.7
+      },
+      "error": "Expecting value: line 1 column 1 (char 0)"
+    }
+  }
+}

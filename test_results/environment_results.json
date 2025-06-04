@@ -1,0 +1,32 @@
+{
+  "status": "success",
+  "tests": {
+    "api_connectivity": {
+      "status": "success",
+      "status_code": 200,
+      "response": "<!DOCTYPE html>\n<html>\n  <head>\n    <title>Sign in \u00e3\u0083\u00bb Cloudflare Access</title>\n    <meta charset=\"utf-8\" />\n    <meta name=\"robots\" content=\"noindex\" />\n    <meta name=\"viewport\" content=\"initial-scale=1, maximum-scale=1, user-scalable=no, width=device-width\" />\n    <article id=\"data\"\n      data-auto-redirect-to-identity=\"true\"\n      data-auto-redirect-url=\"https:&#x2F;&#x2F;login.nvidia.com&#x2F;authorize?client_id&#x3D;YBXM-8MEXR9j3x5XYsYHpoiF4Y34B3OCn9t34n2LQh8&amp;domain&#x3D;YBXM-8MEXR9j3"
+    },
+    "gpu_detection": {
+      "status": "simulated",
+      "gpu_info": {
+        "name": "Tesla T4",
+        "memory_total_mb": 16384,
+        "memory_free_mb": 15000,
+        "cuda_version": "11.8",
+        "driver_version": "450.80.02"
+      },
+      "error": "Expecting value: line 1 column 1 (char 0)"
+    },
+    "python_packages": {
+      "status": "simulated",
+      "packages": {
+        "langchain": "0.0.267",
+        "hdbcli": "2.15.22",
+        "torch": "2.0.1+cu117",
+        "sentence_transformers": "2.2.2",
+        "tensorrt": "8.5.3.1"
+      },
+      "error": "Expecting value: line 1 column 1 (char 0)"
+    }
+  }
+}

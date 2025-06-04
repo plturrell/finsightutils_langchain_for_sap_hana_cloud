@@ -2,6 +2,23 @@
 
 This document summarizes the improvements made to address the identified issues in the LangChain SAP HANA Cloud integration.
 
+## 0. Vercel 500 Error Fixes
+
+### Diagnostic Tools
+- Created a minimal test API (`api/minimal_test.py`) to diagnose function invocation issues
+- Enhanced debug proxy (`api/enhanced_debug_proxy.py`) with detailed logging and error reporting
+- Created timeout manager (`api/timeout_manager.py`) for configurable API operation timeouts
+
+### Deployment Improvements
+- Created specialized deployment scripts for testing and diagnosis
+- Added protection bypass support for testing Vercel functions
+- Fixed syntax issues in Python code that caused function invocation failures
+
+### Documentation
+- Created `docs/troubleshooting_500_errors.md` for general 500 error troubleshooting
+- Created `docs/troubleshooting_function_invocation.md` for Vercel-specific function issues
+- Added detailed comments to all scripts and API endpoints
+
 ## 1. Security Improvements
 
 ### SQL Injection Prevention

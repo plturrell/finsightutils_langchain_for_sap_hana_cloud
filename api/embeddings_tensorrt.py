@@ -27,8 +27,10 @@ class TensorRTEmbeddings(Embeddings):
         device: Optional[str] = None,
         batch_size: int = 32,
         use_tensorrt: bool = True,
-        precision: str = "fp16",
+        precision: Optional[str] = None,
         dynamic_shapes: bool = True,
+        force_rebuild: bool = False,
+        calibration_texts: Optional[List[str]] = None,
     ):
         """
         Initialize the TensorRT-optimized embeddings.
@@ -38,14 +40,17 @@ class TensorRTEmbeddings(Embeddings):
             device: Device to use for computations ('cuda', 'cpu', or None for auto).
             batch_size: Batch size for processing.
             use_tensorrt: Whether to use TensorRT optimization.
-            precision: Precision to use for TensorRT ('fp32', 'fp16').
+            precision: Precision to use for TensorRT ('fp32', 'fp16', 'int8', or None for auto).
             dynamic_shapes: Whether to use dynamic shapes for TensorRT.
+            force_rebuild: Force rebuilding the TensorRT engine.
+            calibration_texts: Text samples for INT8 calibration.
         """
         self.model_name = model_name
         self.batch_size = batch_size
         self.use_tensorrt = use_tensorrt and TENSORRT_AVAILABLE
-        self.precision = precision
+        self.precision = precision  # Will be set based on optimizer if None
         self.dynamic_shapes = dynamic_shapes
+        self.force_rebuild = force_rebuild
         
         # Auto-detect device if not specified
         if device is None:
@@ -67,6 +72,19 @@ class TensorRTEmbeddings(Embeddings):
                 # Get the transformer model component for optimization
                 transformer_model = self.model._modules['0']._modules['auto_model']
                 
+                # Use provided precision or get from optimizer
+                if self.precision is None:
+                    self.precision = tensorrt_optimizer.precision
+                    logger.info(f"Using auto-detected precision: {self.precision}")
+                
+                # Check if calibration data should be used for INT8
+                needs_calibration = self.precision == "int8" and calibration_texts is None
+                if needs_calibration:
+                    # If no calibration texts provided but INT8 requested, use defaults
+                    from tensorrt_utils import INT8CalibrationDataset
+                    calibration_texts = INT8CalibrationDataset.get_default_calibration_texts()
+                    logger.info(f"Using default calibration texts for INT8 quantization")
+                
                 # Optimize with TensorRT
                 optimized_model = tensorrt_optimizer.optimize_model(
                     model=transformer_model,
@@ -74,16 +92,18 @@ class TensorRTEmbeddings(Embeddings):
                     input_shape=[1, 512],  # Typical input shape for embedding models
                     max_batch_size=batch_size * 2,  # Allow for some growth
                     dynamic_shapes=dynamic_shapes,
+                    calibration_data=calibration_texts,  # May be None if not INT8
+                    force_rebuild=force_rebuild,
                 )
                 
                 # Replace the transformer component with the optimized version
                 self.model._modules['0']._modules['auto_model'] = optimized_model
                 
-                logger.info("TensorRT optimization complete")
+                logger.info(f"TensorRT optimization complete with {self.precision} precision")
             
             if self.device == "cuda":
                 if self.use_tensorrt:
-                    logger.info("Using GPU acceleration with TensorRT optimization")
+                    logger.info(f"Using GPU acceleration with TensorRT optimization ({self.precision})")
                 else:
                     logger.info("Using GPU acceleration (TensorRT not available or disabled)")
             else:
@@ -208,7 +228,9 @@ class TensorRTHybridEmbeddings(Embeddings):
         device: Optional[str] = None,
         batch_size: int = 32,
         use_tensorrt: bool = True,
-        precision: str = "fp16",
+        precision: Optional[str] = None,
+        force_rebuild: bool = False,
+        calibration_texts: Optional[List[str]] = None,
     ):
         """
         Initialize the hybrid embeddings with TensorRT optimization.
@@ -220,7 +242,9 @@ class TensorRTHybridEmbeddings(Embeddings):
             device: Device to use for external embeddings.
             batch_size: Batch size for processing external embeddings.
             use_tensorrt: Whether to use TensorRT optimization.
-            precision: Precision to use for TensorRT ('fp32', 'fp16').
+            precision: Precision to use for TensorRT ('fp32', 'fp16', 'int8', or None for auto).
+            force_rebuild: Force rebuilding the TensorRT engine.
+            calibration_texts: Text samples for INT8 calibration.
         """
         self.use_internal = use_internal
         self.internal_embedding_model_id = internal_embedding_model_id
@@ -238,11 +262,17 @@ class TensorRTHybridEmbeddings(Embeddings):
             batch_size=batch_size,
             use_tensorrt=use_tensorrt,
             precision=precision,
+            force_rebuild=force_rebuild,
+            calibration_texts=calibration_texts,
         )
+        
+        # Get the actual precision used (may be auto-detected)
+        self.precision = self.external_embeddings.precision
         
         logger.info(
             f"Hybrid embeddings initialized: "
-            f"Using {'internal' if use_internal else 'external TensorRT-optimized'} embeddings by default"
+            f"Using {'internal' if use_internal else 'external TensorRT-optimized'} embeddings by default. "
+            f"External precision: {self.precision}"
         )
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
@@ -304,14 +334,34 @@ class TensorRTHybridEmbeddings(Embeddings):
         Returns:
             Dictionary with benchmark results.
         """
-        results = {}
+        results = {
+            "test_timestamp": time.time(),
+            "device_info": {
+                "device": self.external_embeddings.device,
+                "precision": self.precision,
+            }
+        }
+        
+        # Get GPU info if available
+        if gpu_utils.is_torch_available():
+            try:
+                results["device_info"]["gpu_name"] = torch.cuda.get_device_name(0)
+                results["device_info"]["cuda_version"] = torch.version.cuda
+                results["device_info"]["compute_capability"] = f"{torch.cuda.get_device_capability()[0]}.{torch.cuda.get_device_capability()[1]}"
+                results["device_info"]["gpu_memory_total_mb"] = torch.cuda.get_device_properties(0).total_memory // (1024 * 1024)
+            except Exception as e:
+                results["device_info"]["gpu_info_error"] = str(e)
         
         # Temporarily switch to external embeddings
         original_mode = self.use_internal
         self.use_internal = False
         
-        # Benchmark external embeddings
-        results["external_tensorrt"] = self.external_embeddings.benchmark()
+        # Benchmark external embeddings with TensorRT
+        results["external_tensorrt"] = {
+            "model": self.external_embeddings.model_name,
+            "precision": self.precision,
+            "benchmark": self.external_embeddings.benchmark(),
+        }
         
         # Switch to internal embeddings if available
         try:
@@ -336,21 +386,33 @@ class TensorRTHybridEmbeddings(Embeddings):
                 _ = self.embed_query(random_text)
             single_query_time = (time.time() - start_time) / iterations
             
-            # Benchmark batch
-            batch_size = 16
-            batch = [random_text] * batch_size
-            
-            start_time = time.time()
-            for _ in range(iterations // batch_size + 1):
-                _ = self.embed_documents(batch)
-            batch_time = (time.time() - start_time) / (iterations // batch_size + 1)
+            # Benchmark with different batch sizes
+            batch_results = {}
+            for batch_size in [1, 8, 16, 32]:
+                try:
+                    batch = [random_text] * batch_size
+                    
+                    # Warmup
+                    _ = self.embed_documents(batch)
+                    
+                    # Benchmark
+                    start_time = time.time()
+                    for _ in range(max(1, iterations // batch_size)):
+                        _ = self.embed_documents(batch)
+                    batch_time = (time.time() - start_time) / max(1, iterations // batch_size)
+                    
+                    batch_results[str(batch_size)] = {
+                        "batch_query_time_ms": batch_time * 1000,
+                        "throughput_samples_per_second": batch_size / batch_time,
+                        "throughput_tokens_per_second": (batch_size * text_length) / batch_time,
+                    }
+                except Exception as e:
+                    batch_results[str(batch_size)] = {"error": str(e)}
             
             results["internal_hana"] = {
                 "model": self.internal_embedding_model_id,
                 "single_query_time_ms": single_query_time * 1000,
-                "batch_query_time_ms": batch_time * 1000,
-                "batch_size": batch_size,
-                "throughput_tokens_per_second": (batch_size * text_length) / batch_time,
+                "batch_sizes": batch_results,
             }
         except Exception as e:
             logger.warning(f"Could not benchmark internal embeddings: {e}")
@@ -360,12 +422,124 @@ class TensorRTHybridEmbeddings(Embeddings):
         self.use_internal = original_mode
         
         # Add comparison metrics
-        if "internal_hana" in results and "error" not in results["internal_hana"]:
+        if "internal_hana" in results and "error" not in results["internal_hana"] and "16" in results["internal_hana"].get("batch_sizes", {}):
             try:
-                external_throughput = results["external_tensorrt"]["throughput_tokens_per_second"]
-                internal_throughput = results["internal_hana"]["throughput_tokens_per_second"]
-                results["speedup_factor"] = external_throughput / internal_throughput
-            except (KeyError, ZeroDivisionError):
-                results["speedup_factor"] = "N/A"
+                # Get throughput for batch size 16 for fair comparison
+                ext_results = results["external_tensorrt"]["benchmark"]
+                if isinstance(ext_results, dict) and "batch_sizes" in ext_results and "16" in ext_results["batch_sizes"]:
+                    external_throughput = ext_results["batch_sizes"]["16"]["throughput_tokens_per_second"]
+                    internal_throughput = results["internal_hana"]["batch_sizes"]["16"]["throughput_tokens_per_second"]
+                    results["speedup_factor"] = external_throughput / internal_throughput
+                    
+                    # Add summary
+                    results["summary"] = {
+                        "internal_model": self.internal_embedding_model_id,
+                        "external_model": self.external_embeddings.model_name,
+                        "external_precision": self.precision,
+                        "internal_throughput": internal_throughput,
+                        "external_throughput": external_throughput,
+                        "speedup_factor": external_throughput / internal_throughput,
+                    }
+            except (KeyError, ZeroDivisionError, TypeError) as e:
+                results["speedup_error"] = str(e)
         
+        return results
+        
+    def run_precision_comparison(self) -> Dict[str, Any]:
+        """
+        Run a comparison of different precision modes for the external embeddings.
+        
+        This method tests FP32, FP16, and INT8 precision for the external TensorRT model
+        and compares throughput performance.
+        
+        Returns:
+            Dictionary with benchmark results for different precision modes.
+        """
+        # Save original state
+        original_mode = self.use_internal
+        original_precision = self.precision
+        
+        # Create results dictionary
+        results = {
+            "model": self.external_embeddings.model_name,
+            "device_info": {
+                "name": torch.cuda.get_device_name(0) if gpu_utils.is_torch_available() else "CPU",
+                "compute_capability": f"{torch.cuda.get_device_capability()[0]}.{torch.cuda.get_device_capability()[1]}" 
+                                    if gpu_utils.is_torch_available() else "N/A",
+            },
+            "precision_modes": {}
+        }
+        
+        # Temporarily switch to external embeddings
+        self.use_internal = False
+        
+        # Get access to the underlying tensorrt_optimizer
+        from tensorrt_utils import tensorrt_optimizer
+        
+        # Test each precision mode
+        for precision in ["fp32", "fp16", "int8"]:
+            try:
+                # Skip INT8 if not supported
+                if precision == "int8" and not gpu_utils.is_torch_available():
+                    results["precision_modes"]["int8"] = {"error": "INT8 requires GPU acceleration"}
+                    continue
+                    
+                if precision == "int8" and torch.cuda.get_device_capability()[0] < 7:
+                    results["precision_modes"]["int8"] = {"error": "INT8 requires Volta (SM70) or newer GPU"}
+                    continue
+                
+                logger.info(f"Testing {precision} precision")
+                
+                # Create a new embeddings model with this precision
+                temp_embeddings = TensorRTEmbeddings(
+                    model_name=self.external_embeddings.model_name,
+                    device=self.external_embeddings.device,
+                    batch_size=self.external_embeddings.batch_size,
+                    use_tensorrt=True,
+                    precision=precision,
+                    force_rebuild=True,  # Force rebuild to ensure fair comparison
+                )
+                
+                # Run benchmark
+                benchmark_result = temp_embeddings.benchmark()
+                results["precision_modes"][precision] = benchmark_result
+                
+                # Clean up
+                del temp_embeddings
+                torch.cuda.empty_cache()
+                
+            except Exception as e:
+                logger.error(f"Error benchmarking {precision} precision: {e}")
+                results["precision_modes"][precision] = {"error": str(e)}
+        
+        # Restore original state
+        self.use_internal = original_mode
+        
+        # Calculate speedup factors
+        if "fp32" in results["precision_modes"] and "throughput_tokens_per_second" in results["precision_modes"]["fp32"]:
+            fp32_baseline = results["precision_modes"]["fp32"]["throughput_tokens_per_second"]
+            
+            # FP16 speedup
+            if "fp16" in results["precision_modes"] and "throughput_tokens_per_second" in results["precision_modes"]["fp16"]:
+                fp16_throughput = results["precision_modes"]["fp16"]["throughput_tokens_per_second"]
+                results["fp16_vs_fp32_speedup"] = fp16_throughput / fp32_baseline
+            
+            # INT8 speedup
+            if "int8" in results["precision_modes"] and "throughput_tokens_per_second" in results["precision_modes"]["int8"]:
+                int8_throughput = results["precision_modes"]["int8"]["throughput_tokens_per_second"]
+                results["int8_vs_fp32_speedup"] = int8_throughput / fp32_baseline
+                
+                # INT8 vs FP16
+                if "fp16" in results["precision_modes"] and "throughput_tokens_per_second" in results["precision_modes"]["fp16"]:
+                    fp16_throughput = results["precision_modes"]["fp16"]["throughput_tokens_per_second"]
+                    results["int8_vs_fp16_speedup"] = int8_throughput / fp16_throughput
+        
+        # Add recommended precision based on results
+        if "int8_vs_fp32_speedup" in results and results["int8_vs_fp32_speedup"] > 1.1:
+            results["recommended_precision"] = "int8"
+        elif "fp16_vs_fp32_speedup" in results and results["fp16_vs_fp32_speedup"] > 1.1:
+            results["recommended_precision"] = "fp16"
+        else:
+            results["recommended_precision"] = "fp32"
+            
         return results

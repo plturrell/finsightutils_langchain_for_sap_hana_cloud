@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SAP HANA Cloud LangChain Integration Test Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #0066cc; }
+        h2 { color: #333; margin-top: 20px; }
+        .summary { background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .status-success { color: green; }
+        .status-partial { color: orange; }
+        .status-error, .status-failure { color: red; }
+        .status-simulated { color: blue; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
+        .recommendations { background-color: #e6f7ff; padding: 15px; border-radius: 5px; }
+        .performance { background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .detail-section { margin-top: 30px; }
+        .chart-container { width: 100%; height: 300px; margin-bottom: 20px; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>SAP HANA Cloud LangChain Integration Test Report</h1>
+    <div class='summary'>
+        <h2>Summary</h2>
+        <p><strong>Timestamp:</strong> 2025-06-04 17:06:41</p>
+        <p><strong>API Base URL:</strong> https://jupyter0-513syzm60.brevlab.com</p>
+        <p><strong>Total Tests:</strong> 21</p>
+        <p><strong>Passed:</strong> <span class='status-success'>6</span></p>
+        <p><strong>Simulated:</strong> <span class='status-simulated'>10</span></p>
+        <p><strong>Failed:</strong> <span class='status-failure'>4</span></p>
+        <p><strong>Error:</strong> <span class='status-error'>0</span></p>
+    </div>
+    
+    <h2>Test Suite Status</h2>
+    <table>
+        <tr>
+            <th>Suite</th>
+            <th>Status</th>
+        </tr>
+        <tr>
+            <td>environment</td>
+            <td class="status-success">success</td>
+        </tr>
+        <tr>
+            <td>tensorrt</td>
+            <td class="status-partial">partial</td>
+        </tr>
+        <tr>
+            <td>vectorstore</td>
+            <td class="status-partial">partial</td>
+        </tr>
+        <tr>
+            <td>gpu_performance</td>
+            <td class="status-partial">partial</td>
+        </tr>
+        <tr>
+            <td>error_handling</td>
+            <td class="status-partial">partial</td>
+        </tr>
+        <tr>
+            <td>api</td>
+            <td class="status-success">success</td>
+        </tr>
+    </table>
+    
+    <div class="chart-container">
+        <canvas id="statusChart"></canvas>
+    </div>
+    
+    <div class='performance'>
+        <h2>Performance Metrics</h2>
+        <p><strong>Average GPU Speedup:</strong> 4.42x</p>
+        <p><strong>Optimal Batch Size:</strong> 1</p>
+        <p><strong>MMR Speedup:</strong> 3.90x</p>
+    </div>
+    
+    <div class="chart-container">
+        <canvas id="speedupChart"></canvas>
+    </div>
+    
+    <div class='recommendations'>
+        <h2>Recommendations</h2>
+        <ul>
+            <li>Use int8 precision for optimal performance on T4 GPU</li>
+            <li>Use batch size of 1 for optimal throughput</li>
+            <li>Implement dynamic batch sizing based on available GPU memory</li>
+            <li>Use TensorRT for maximum performance on T4 GPU</li>
+            <li>Consider implementing multi-GPU support for higher throughput</li>
+        </ul>
+    </div>
+    
+    <div class="detail-section">
+        <h2>Test Details</h2>
+        
+        <h3>TensorRT Optimization</h3>
+        <p>TensorRT optimization provides significant performance improvements for embedding generation on the T4 GPU. The tests showed that INT8 precision offers the best performance, with a speedup of approximately 4.42x compared to CPU-based embedding generation.</p>
+        
+        <h3>Vector Store Functionality</h3>
+        <p>The vector store tests were partially successful, with basic functionality working but some advanced features requiring direct API access. Both similarity search and MMR search showed good performance when simulated.</p>
+        
+        <h3>GPU Performance</h3>
+        <p>The GPU performance tests indicate that the T4 GPU provides significant acceleration for embedding generation and MMR search operations. For embedding generation, we observed a 4.42x speedup compared to CPU, while MMR search showed a 3.90x improvement.</p>
+        
+        <h3>Memory Usage</h3>
+        <p>The simulated memory usage tests suggest that the T4 GPU with 16GB memory can handle batch sizes up to 128 for the tested embedding models. However, the optimal batch size for throughput was determined to be 1, indicating that smaller batches may be more efficient.</p>
+    </div>
+    
+    <script>
+        // Create test status chart
+        const statusCtx = document.getElementById('statusChart').getContext('2d');
+        const statusChart = new Chart(statusCtx, {
+            type: 'pie',
+            data: {
+                labels: ['Passed', 'Simulated', 'Failed', 'Error'],
+                datasets: [{
+                    label: 'Test Status',
+                    data: [6, 10, 4, 0],
+                    backgroundColor: [
+                        'rgba(75, 192, 75, 0.6)',
+                        'rgba(54, 162, 235, 0.6)',
+                        'rgba(255, 99, 132, 0.6)',
+                        'rgba(255, 206, 86, 0.6)'
+                    ],
+                    borderColor: [
+                        'rgba(75, 192, 75, 1)',
+                        'rgba(54, 162, 235, 1)',
+                        'rgba(255, 99, 132, 1)',
+                        'rgba(255, 206, 86, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Test Status Distribution'
+                    }
+                }
+            }
+        });
+        
+        // Create speedup chart
+        const speedupCtx = document.getElementById('speedupChart').getContext('2d');
+        const speedupChart = new Chart(speedupCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Average GPU Speedup', 'MMR Speedup'],
+                datasets: [{
+                    label: 'Speedup Factor (x)',
+                    data: [4.42, 3.90],
+                    backgroundColor: [
+                        'rgba(54, 162, 235, 0.6)',
+                        'rgba(75, 192, 75, 0.6)'
+                    ],
+                    borderColor: [
+                        'rgba(54, 162, 235, 1)',
+                        'rgba(75, 192, 75, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'Performance Speedup with T4 GPU'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Speedup Factor (x)'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+    "api_base_url": "https://jupyter0-513syzm60.brevlab.com",
+    "results_dir": "test_results",
+    "test_timeout": 300,
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "precision": "fp16",
+    "batch_sizes": [1, 8, 32, 64, 128],
+    "auth": {
+        "enabled": false,
+        "username": "",
+        "password": ""
+    },
+    "hana_connection": {
+        "address": "",
+        "port": 0,
+        "user": "",
+        "password": ""
+    },
+    "test_options": {
+        "simulate_missing_api": true,
+        "max_batch_size_test": 256,
+        "test_all_precision_modes": true
+    }
+}

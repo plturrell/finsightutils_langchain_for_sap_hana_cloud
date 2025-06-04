@@ -104,12 +104,45 @@ The following documentation is available:
 - `docs/monitoring_guide.md`: Monitoring and alerting setup
 - `docs/gpu_acceleration.md`: GPU acceleration details
 
+## Troubleshooting 500 Errors
+
+We've added comprehensive debugging tools to address the 500 server errors encountered in the Vercel deployment:
+
+1. **Diagnostic Tools**
+   - **Minimal Test API**: Created `api/minimal_test.py` to diagnose function invocation issues
+   - **Enhanced Debug Proxy**: Added `api/enhanced_debug_proxy.py` with detailed logging
+   - **Timeout Manager**: Implemented `api/timeout_manager.py` for configurable timeouts
+
+2. **Deployment Scripts**
+   - **No-Token Deployment**: Updated `scripts/deploy_vercel_no_token.sh` to deploy without a token
+   - **Minimal Test Deployment**: Created `scripts/deploy_minimal_test.sh` to isolate function issues
+   - **API Testing**: Added `scripts/test_minimal_api.sh` to test API endpoints
+
+3. **Troubleshooting Documentation**
+   - **500 Error Guide**: Created `docs/troubleshooting_500_errors.md` for general guidance
+   - **Function Invocation Guide**: Added `docs/troubleshooting_function_invocation.md` for Vercel-specific issues
+
+4. **Authentication Bypass**
+   - Added support for Vercel protection bypass to test endpoints
+   - Documented bypass process in troubleshooting guides
+
 ## Next Steps
 
-1. Perform testing of the deployed integration using the testing plan
-2. Set up monitoring and alerting based on the monitoring guide
-3. Consider implementing additional features:
+1. **Diagnose Function Invocation Issues**
+   - Deploy minimal test API using `scripts/deploy_minimal_test.sh`
+   - Test minimal endpoints to verify basic function execution
+   - If successful, deploy full application with `scripts/deploy_vercel_no_token.sh`
+   - Test all endpoints using the protection bypass token
+
+2. **Optimization and Monitoring**
+   - Perform testing of the deployed integration using the testing plan
+   - Set up monitoring and alerting based on the monitoring guide
+   - Analyze logs for performance bottlenecks
+   - Implement memory optimization strategies
+
+3. **Feature Enhancements**
    - User management system
    - More sophisticated authentication
    - Additional GPU optimizations
    - Performance analytics dashboard
+   - Automated health checks and recovery
