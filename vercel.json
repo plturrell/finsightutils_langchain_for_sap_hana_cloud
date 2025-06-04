@@ -7,9 +7,7 @@
       "use": "@vercel/python",
       "config": {
         "runtime": "python3.9",
-        "maxDuration": 60,
-        "includeFiles": ["api/requirements-vercel.txt"],
-        "installCommand": "pip install -r api/requirements-vercel.txt"
+        "maxDuration": 60
       }
     },
     {
