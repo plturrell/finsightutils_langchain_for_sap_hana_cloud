@@ -1,6 +1,6 @@
 {
-  "name": "sap-hana-langchain-ui",
-  "version": "1.0.0",
+  "name": "langchain-hana-enterprise-ui",
+  "version": "1.2.0",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -43,7 +43,8 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "vercel-build": "react-scripts build"
   },
   "eslintConfig": {
     "extends": [
@@ -63,5 +64,8 @@
       "last 1 safari version"
     ]
   },
-  "proxy": "http://localhost:8000"
+  "proxy": "http://localhost:8000",
+  "engines": {
+    "node": ">=16.0.0"
+  }
 }

@@ -3,11 +3,14 @@
 .git
 __pycache__
 *.pyc
+*.pyo
+*.pyd
 .pytest_cache
 .venv
 venv
 env
-docs
+.env
+.env.example
 scripts
 tests
 LICENSES
@@ -16,3 +19,20 @@ LICENSES
 !vercel.json
 node_modules
 .DS_Store
+
+# Large files and data
+*.csv
+*.npy
+*.pkl
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Nvidia specific
+nvidia-launchable.yaml
+api/requirements-tensorrt.txt
+
+# Keep our special vercel requirements
+!api/requirements-vercel.txt

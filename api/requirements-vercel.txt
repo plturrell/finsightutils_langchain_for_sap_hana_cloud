@@ -1,30 +1,26 @@
-# Vercel-specific requirements
-# This file contains dependencies optimized for Vercel serverless deployment
-
 # Core API dependencies
 fastapi==0.109.2
 uvicorn==0.27.1
 python-dotenv==1.0.1
 pydantic==2.6.1
 
-# SAP HANA Cloud dependencies
-hdbcli==2.23.24
-langchain-core==0.3.0
-langchain==0.1.0
-numpy>=1.22.0,<1.27.0
+# SAP HANA Cloud dependencies - version pinned to avoid conflicts
+hdbcli==2.18.27
+langchain==0.0.335
+langchain-core==0.1.15
 
 # Utility dependencies
 python-multipart==0.0.6
 rdflib==7.0.0
+numpy==1.24.4
 
 # Embeddings (lightweight version for serverless)
 sentence-transformers==2.2.2
 
 # Performance optimization
-orjson==3.9.15
-ujson==5.8.0
+orjson==3.9.10
 httptools==0.6.1
 sse-starlette==1.6.5
 
-# Vercel-specific packages
-serverless-fastapi==0.2.0
+# For async support
+anyio==3.7.1

@@ -14,6 +14,9 @@ os.environ["USE_TENSORRT"] = "false"
 os.environ["USE_INTERNAL_EMBEDDINGS"] = "false"
 os.environ["MAX_RESPONSE_TIME"] = "50"  # 50 seconds max to avoid Vercel timeout
 os.environ["VERCEL_DEPLOYMENT"] = "true"
+os.environ["ENABLE_ERROR_CONTEXT"] = "true"
+os.environ["ENABLE_PRECISE_SIMILARITY"] = "true"
+os.environ["ERROR_DETAIL_LEVEL"] = "standard"
 
 # Configure logging
 logging.basicConfig(
@@ -21,48 +24,14 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger("vercel_handler")
-logger.info("Initializing Vercel serverless function")
+logger.info("Initializing Vercel serverless function with error handling support")
 
 # Now import app
 from app import app
-from fastapi import Request, Response
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
+from vercel_middleware import setup_middleware
 
-# Ensure CORS is enabled
-if not any(isinstance(m, CORSMiddleware) for m in app.user_middleware):
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
-# Add middleware for Vercel-specific headers and request timing
-@app.middleware("http")
-async def add_vercel_headers(request: Request, call_next):
-    """Add Vercel-specific headers and track request timing."""
-    start_time = time.time()
-    
-    try:
-        # Process the request
-        response = await call_next(request)
-        
-        # Add Vercel-specific headers
-        response.headers["x-vercel-deployment"] = "1"
-        response.headers["x-response-time"] = str(round((time.time() - start_time) * 1000))
-        
-        return response
-    except Exception as e:
-        # Log any errors
-        logger.error(f"Error processing request: {str(e)}")
-        
-        # Return error response
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Internal server error", "message": str(e)},
-        )
+# Set up middleware for Vercel deployment
+app = setup_middleware(app)
 
 # Add a specific route for Vercel health checks
 @app.get("/__health")

@@ -9,8 +9,8 @@ import sys
 # Add the current directory to the path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Import the simplified app for Vercel deployment
-from vercel_app import app
+# Import the handler from vercel_handler.py
+from vercel_handler import app
 
 # Make the handler available to Vercel
 handler = app
