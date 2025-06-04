@@ -68,6 +68,8 @@
     "ENABLE_DETAILED_LOGGING": "true",
     "MAX_RETRY_COUNT": "3",
     "RETRY_DELAY_MS": "1000",
-    "ENABLE_SSL_VERIFICATION": "true"
-  }
+    "ENABLE_SSL_VERIFICATION": "true",
+    "REQUIRE_AUTH": "false"
+  },
+  "public": true
 }

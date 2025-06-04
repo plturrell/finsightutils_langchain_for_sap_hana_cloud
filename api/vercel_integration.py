@@ -319,8 +319,12 @@ async def generate_embeddings(
     """Generate embeddings using T4 GPU backend"""
     try:
         # Optional authentication check
-        if ENVIRONMENT == "production" and not current_user:
+        # Disabled for development and when REQUIRE_AUTH is false
+        require_auth = os.getenv("REQUIRE_AUTH", "true").lower() == "true"
+        if ENVIRONMENT == "production" and require_auth and not current_user:
             raise HTTPException(status_code=401, detail="Authentication required")
+        else:
+            logger.debug(f"Authentication check bypassed. Environment: {ENVIRONMENT}, Require Auth: {require_auth}")
         
         # Get appropriate timeout for embeddings endpoint
         timeout_value = get_timeout("embeddings") if TIMEOUT_MANAGER_AVAILABLE else DEFAULT_TIMEOUT
@@ -354,8 +358,12 @@ async def search(
     """Perform similarity search using T4 GPU backend"""
     try:
         # Optional authentication check
-        if ENVIRONMENT == "production" and not current_user:
+        # Disabled for development and when REQUIRE_AUTH is false
+        require_auth = os.getenv("REQUIRE_AUTH", "true").lower() == "true"
+        if ENVIRONMENT == "production" and require_auth and not current_user:
             raise HTTPException(status_code=401, detail="Authentication required")
+        else:
+            logger.debug(f"Authentication check bypassed. Environment: {ENVIRONMENT}, Require Auth: {require_auth}")
         
         # Get appropriate timeout for search endpoint
         timeout_value = get_timeout("search") if TIMEOUT_MANAGER_AVAILABLE else DEFAULT_TIMEOUT
@@ -389,8 +397,12 @@ async def mmr_search(
     """Perform MMR search using T4 GPU backend"""
     try:
         # Optional authentication check
-        if ENVIRONMENT == "production" and not current_user:
+        # Disabled for development and when REQUIRE_AUTH is false
+        require_auth = os.getenv("REQUIRE_AUTH", "true").lower() == "true"
+        if ENVIRONMENT == "production" and require_auth and not current_user:
             raise HTTPException(status_code=401, detail="Authentication required")
+        else:
+            logger.debug(f"Authentication check bypassed. Environment: {ENVIRONMENT}, Require Auth: {require_auth}")
         
         # Get appropriate timeout for MMR search endpoint
         timeout_value = get_timeout("search") if TIMEOUT_MANAGER_AVAILABLE else DEFAULT_TIMEOUT
@@ -460,8 +472,12 @@ async def get_metrics(current_user: Optional[str] = Depends(get_current_user)):
     """Get performance metrics from the T4 GPU backend"""
     try:
         # Optional authentication check
-        if ENVIRONMENT == "production" and not current_user:
+        # Disabled for development and when REQUIRE_AUTH is false
+        require_auth = os.getenv("REQUIRE_AUTH", "true").lower() == "true"
+        if ENVIRONMENT == "production" and require_auth and not current_user:
             raise HTTPException(status_code=401, detail="Authentication required")
+        else:
+            logger.debug(f"Authentication check bypassed. Environment: {ENVIRONMENT}, Require Auth: {require_auth}")
         
         # Get appropriate timeout for metrics endpoint
         timeout_value = get_timeout("metrics") if TIMEOUT_MANAGER_AVAILABLE else DEFAULT_TIMEOUT
