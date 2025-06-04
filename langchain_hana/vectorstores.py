@@ -1,4 +1,19 @@
-"""SAP HANA Cloud Vector Engine"""
+"""SAP HANA Cloud Vector Engine
+
+This module provides a LangChain VectorStore implementation for SAP HANA Cloud,
+enabling storage and retrieval of embeddings using SAP HANA's vector capabilities.
+
+Key features:
+- Vector similarity search with context-aware error handling
+- Support for both internal (HANA-generated) and external embeddings
+- Rich metadata filtering with various operators
+- Maximal Marginal Relevance (MMR) search for diverse results
+- HNSW vector indexing for performance optimization
+- Accurate similarity scoring with proper normalization
+
+The implementation handles various edge cases and provides detailed error messages
+with suggested actions when problems occur.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +24,7 @@ import struct
 from typing import (
     Any,
     Callable,
+    Dict,
     Iterable,
     Optional,
     Pattern,
@@ -24,6 +40,7 @@ from langchain_core.vectorstores import VectorStore
 from langchain_core.vectorstores.utils import maximal_marginal_relevance
 
 from langchain_hana.embeddings import HanaInternalEmbeddings
+from langchain_hana.error_utils import handle_database_error
 from langchain_hana.query_constructors import (
     CONTAINS_OPERATOR,
     LOGICAL_OPERATORS_TO_SQL,
@@ -201,20 +218,39 @@ class HanaDB(VectorStore):
                            params["vector_column_type"],
                            params.get("vector_column_length") if self.vector_column_length not in [-1, 0] else None
                            )
+            except dbapi.Error as e:
+                # Provide context-aware error information for table creation issues
+                additional_context = {
+                    "table_name": self.table_name,
+                    "vector_column_type": self.vector_column_type,
+                    "vector_column_length": self.vector_column_length
+                }
+                handle_database_error(e, "table_creation", additional_context)
             finally:
                 cur.close()
 
-        # Check if the needed columns exist and have the correct type
-        self._check_column(self.table_name, self.content_column, ["NCLOB", "NVARCHAR"])
-        self._check_column(self.table_name, self.metadata_column, ["NCLOB", "NVARCHAR"])
-        self._check_column(
-            self.table_name,
-            self.vector_column,
-            [self.vector_column_type],
-            self.vector_column_length,
-        )
-        for column_name in self.specific_metadata_columns:
-            self._check_column(self.table_name, column_name)
+        try:
+            # Check if the needed columns exist and have the correct type
+            self._check_column(self.table_name, self.content_column, ["NCLOB", "NVARCHAR"])
+            self._check_column(self.table_name, self.metadata_column, ["NCLOB", "NVARCHAR"])
+            self._check_column(
+                self.table_name,
+                self.vector_column,
+                [self.vector_column_type],
+                self.vector_column_length,
+            )
+            for column_name in self.specific_metadata_columns:
+                self._check_column(self.table_name, column_name)
+        except AttributeError as e:
+            # Provide context-aware error information for column validation issues
+            additional_context = {
+                "table_name": self.table_name,
+                "vector_column_type": self.vector_column_type,
+                "content_column": self.content_column,
+                "metadata_column": self.metadata_column,
+                "vector_column": self.vector_column
+            }
+            handle_database_error(e, "table_creation", additional_context)
 
     def _table_exists(self, table_name) -> bool:  # type: ignore[no-untyped-def]
         sql_str = (
@@ -541,64 +577,92 @@ class HanaDB(VectorStore):
             index_name: (Optional) Custom index name. Defaults to
                         <table_name>_<distance_strategy>_idx
         """
-        # Set default index name if not provided
-        distance_func_name = HANA_DISTANCE_FUNCTION[self.distance_strategy][0]
-        default_index_name = f"{self.table_name}_{distance_func_name}_idx"
-        # Use provided index_name or default
-        index_name = (
-            HanaDB._sanitize_name(index_name) if index_name else default_index_name
-        )
-        # Initialize build_config and search_config as empty dictionaries
-        build_config = {}
-        search_config = {}
-
-        # Validate and add m parameter to build_config if provided
-        if m is not None:
-            m = HanaDB._sanitize_int(m)
-            if not (4 <= m <= 1000):
-                raise ValueError("M must be in the range [4, 1000]")
-            build_config["M"] = m
-
-        # Validate and add ef_construction to build_config if provided
-        if ef_construction is not None:
-            ef_construction = HanaDB._sanitize_int(ef_construction)
-            if not (1 <= ef_construction <= 100000):
-                raise ValueError("efConstruction must be in the range [1, 100000]")
-            build_config["efConstruction"] = ef_construction
-
-        # Validate and add ef_search to search_config if provided
-        if ef_search is not None:
-            ef_search = HanaDB._sanitize_int(ef_search)
-            if not (1 <= ef_search <= 100000):
-                raise ValueError("efSearch must be in the range [1, 100000]")
-            search_config["efSearch"] = ef_search
-
-        # Convert build_config and search_config to JSON strings if they contain values
-        build_config_str = json.dumps(build_config) if build_config else ""
-        search_config_str = json.dumps(search_config) if search_config else ""
-
-        # Create the index SQL string with the ONLINE keyword
-        sql_str = (
-            f'CREATE HNSW VECTOR INDEX {index_name} ON "{self.table_name}" '
-            f'("{self.vector_column}") '
-            f"SIMILARITY FUNCTION {distance_func_name} "
-        )
-
-        # Append build_config to the SQL string if provided
-        if build_config_str:
-            sql_str += f"BUILD CONFIGURATION '{build_config_str}' "
-
-        # Append search_config to the SQL string if provided
-        if search_config_str:
-            sql_str += f"SEARCH CONFIGURATION '{search_config_str}' "
-
-        # Always add the ONLINE option
-        sql_str += "ONLINE "
-        cur = self.connection.cursor()
         try:
-            cur.execute(sql_str)
-        finally:
-            cur.close()
+            # Set default index name if not provided
+            distance_func_name = HANA_DISTANCE_FUNCTION[self.distance_strategy][0]
+            default_index_name = f"{self.table_name}_{distance_func_name}_idx"
+            # Use provided index_name or default
+            index_name = (
+                HanaDB._sanitize_name(index_name) if index_name else default_index_name
+            )
+            # Initialize build_config and search_config as empty dictionaries
+            build_config = {}
+            search_config = {}
+    
+            # Validate and add m parameter to build_config if provided
+            if m is not None:
+                m = HanaDB._sanitize_int(m)
+                if not (4 <= m <= 1000):
+                    raise ValueError("M must be in the range [4, 1000]")
+                build_config["M"] = m
+    
+            # Validate and add ef_construction to build_config if provided
+            if ef_construction is not None:
+                ef_construction = HanaDB._sanitize_int(ef_construction)
+                if not (1 <= ef_construction <= 100000):
+                    raise ValueError("efConstruction must be in the range [1, 100000]")
+                build_config["efConstruction"] = ef_construction
+    
+            # Validate and add ef_search to search_config if provided
+            if ef_search is not None:
+                ef_search = HanaDB._sanitize_int(ef_search)
+                if not (1 <= ef_search <= 100000):
+                    raise ValueError("efSearch must be in the range [1, 100000]")
+                search_config["efSearch"] = ef_search
+    
+            # Convert build_config and search_config to JSON strings if they contain values
+            build_config_str = json.dumps(build_config) if build_config else ""
+            search_config_str = json.dumps(search_config) if search_config else ""
+    
+            # Create the index SQL string with the ONLINE keyword
+            sql_str = (
+                f'CREATE HNSW VECTOR INDEX {index_name} ON "{self.table_name}" '
+                f'("{self.vector_column}") '
+                f"SIMILARITY FUNCTION {distance_func_name} "
+            )
+    
+            # Append build_config to the SQL string if provided
+            if build_config_str:
+                sql_str += f"BUILD CONFIGURATION '{build_config_str}' "
+    
+            # Append search_config to the SQL string if provided
+            if search_config_str:
+                sql_str += f"SEARCH CONFIGURATION '{search_config_str}' "
+    
+            # Always add the ONLINE option
+            sql_str += "ONLINE "
+            cur = self.connection.cursor()
+            try:
+                cur.execute(sql_str)
+            except dbapi.Error as e:
+                # Provide context-aware error handling for index creation issues
+                additional_context = {
+                    "table_name": self.table_name,
+                    "vector_column": self.vector_column,
+                    "index_name": index_name,
+                    "distance_function": distance_func_name,
+                    "has_build_config": bool(build_config),
+                    "has_search_config": bool(search_config),
+                    "m_value": m,
+                    "ef_construction_value": ef_construction,
+                    "ef_search_value": ef_search
+                }
+                handle_database_error(e, "index_creation", additional_context)
+            finally:
+                cur.close()
+        except ValueError as e:
+            # Handle validation errors with more context
+            if "range" in str(e):
+                logger.error(f"Invalid HNSW index parameter: {str(e)}")
+                raise ValueError(
+                    f"{str(e)}\n\n"
+                    f"Valid parameter ranges:\n"
+                    f"- M: 4 to 1000 (higher values may improve recall but increase memory usage)\n"
+                    f"- efConstruction: 1 to 100000 (higher values may improve index quality but increase build time)\n"
+                    f"- efSearch: 1 to 100000 (higher values may improve search quality but reduce speed)\n\n"
+                    f"Recommendation: Start with lower values and increase if needed for better quality."
+                ) from e
+            raise
 
     def add_texts(  # type: ignore[override]
         self,
@@ -639,41 +703,68 @@ class HanaDB(VectorStore):
         **kwargs: Any,
     ) -> list[str]:
         """Add texts using external embedding function"""
-        # Create all embeddings of the texts beforehand to improve performance
-        if embeddings is None:
-            embeddings = self.embedding.embed_documents(list(texts))
-
-        # Create sql parameters array
-        sql_params = []
-        for i, text in enumerate(texts):
-            metadata = metadatas[i] if metadatas else {}
-            metadata, extracted_special_metadata = self._split_off_special_metadata(
-                metadata
-            )
-            sql_params.append(
-                (
-                    text,
-                    json.dumps(HanaDB._sanitize_metadata_keys(metadata)),
-                    self._serialize_binary_format(embeddings[i]),
-                    *extracted_special_metadata,
-                )
-            )
-
-        specific_metadata_columns_string = self._get_specific_metadata_columns_string()
-        sql_str = (
-            f'INSERT INTO "{self.table_name}" ("{self.content_column}", '
-            f'"{self.metadata_column}", '
-            f'"{self.vector_column}"{specific_metadata_columns_string}) '
-            f"VALUES (?, ?, ?"
-            f"{', ?' * len(self.specific_metadata_columns)});"
-        )
-
-        # Insert data into the table
-        cur = self.connection.cursor()
         try:
-            cur.executemany(sql_str, sql_params)
-        finally:
-            cur.close()
+            # Create all embeddings of the texts beforehand to improve performance
+            if embeddings is None:
+                embeddings = self.embedding.embed_documents(list(texts))
+    
+            # Create sql parameters array
+            sql_params = []
+            for i, text in enumerate(texts):
+                metadata = metadatas[i] if metadatas else {}
+                metadata, extracted_special_metadata = self._split_off_special_metadata(
+                    metadata
+                )
+                sql_params.append(
+                    (
+                        text,
+                        json.dumps(HanaDB._sanitize_metadata_keys(metadata)),
+                        self._serialize_binary_format(embeddings[i]),
+                        *extracted_special_metadata,
+                    )
+                )
+    
+            specific_metadata_columns_string = self._get_specific_metadata_columns_string()
+            sql_str = (
+                f'INSERT INTO "{self.table_name}" ("{self.content_column}", '
+                f'"{self.metadata_column}", '
+                f'"{self.vector_column}"{specific_metadata_columns_string}) '
+                f"VALUES (?, ?, ?"
+                f"{', ?' * len(self.specific_metadata_columns)});"
+            )
+    
+            # Insert data into the table
+            cur = self.connection.cursor()
+            try:
+                cur.executemany(sql_str, sql_params)
+            except dbapi.Error as e:
+                # Provide context-aware error handling for insertion issues
+                additional_context = {
+                    "table_name": self.table_name,
+                    "num_documents": len(sql_params),
+                    "has_metadata": metadatas is not None,
+                    "has_specific_metadata_columns": len(self.specific_metadata_columns) > 0,
+                    "embedding_dimensions": len(embeddings[0]) if embeddings and len(embeddings) > 0 else "unknown"
+                }
+                handle_database_error(e, "add_texts", additional_context)
+            finally:
+                cur.close()
+        except Exception as e:
+            # Handle non-database errors (e.g., embedding generation failures)
+            if not isinstance(e, dbapi.Error):
+                logger.error(f"Error adding texts with external embeddings: {str(e)}")
+                additional_context = {
+                    "embedding_model": str(self.embedding.__class__.__name__),
+                    "num_documents": len(list(texts)) if isinstance(texts, list) else "unknown",
+                    "operation": "external_embedding_generation"
+                }
+                # Wrap non-database errors with context
+                raise ValueError(
+                    f"Error generating embeddings or adding texts: {str(e)}\n"
+                    f"Embedding model: {additional_context['embedding_model']}\n"
+                    f"Number of documents: {additional_context['num_documents']}"
+                ) from e
+            raise
         return []
 
     def _add_texts_using_internal_embedding(
@@ -710,71 +801,100 @@ class HanaDB(VectorStore):
             This method is automatically called by add_texts when the embedding instance
             is of type HanaInternalEmbeddings.
         """
-        # Prepare parameters for each document
-        sql_params = []
-        for i, text in enumerate(texts):
-            # Get metadata for this document
-            metadata = metadatas[i] if metadatas else {}
-            
-            # Extract specific metadata fields that should go into dedicated columns
-            metadata, extracted_special_metadata = self._split_off_special_metadata(
-                metadata
-            )
-            
-            # Prepare parameters for SQL query
-            parameters = {
-                "content": text,  # Document text
-                "metadata": json.dumps(
-                    HanaDB._sanitize_metadata_keys(metadata)
-                ),  # Serialized metadata JSON
-                "model_version": self.internal_embedding_model_id,  # Embedding model ID
-            }
-            
-            # Add specific metadata columns as separate parameters
-            parameters.update(
-                {
-                    col: value
-                    for col, value in zip(
-                        self.specific_metadata_columns, extracted_special_metadata
-                    )
-                }
-            )
-            
-            sql_params.append(parameters)
-
-        # Build the SQL INSERT statement
-        
-        # Create parameter placeholders for specific metadata columns
-        specific_metadata_str = ", ".join(
-            f":{col}" for col in self.specific_metadata_columns
-        )
-        
-        # Build the column list including specific metadata columns
-        specific_metadata_columns_string = self._get_specific_metadata_columns_string()
-
-        # Prepare the VECTOR_EMBEDDING SQL expression
-        vector_embedding_sql = "VECTOR_EMBEDDING(:content, 'DOCUMENT', :model_version)"
-        
-        # Apply type conversion if needed (e.g., convert to HALF_VECTOR if that's the column type)
-        vector_embedding_sql = self._convert_vector_embedding_to_column_type(
-            vector_embedding_sql
-        )
-
-        # Construct the full INSERT statement
-        sql_str = (
-            f'INSERT INTO "{self.table_name}" ("{self.content_column}", '
-            f'"{self.metadata_column}", '
-            f'"{self.vector_column}"{specific_metadata_columns_string}) '
-            f"VALUES (:content, :metadata, {vector_embedding_sql} "
-            f"{(', ' + specific_metadata_str) if specific_metadata_str else ''});"
-        )
-
-        # Execute the INSERT statement for all documents
-        cur = self.connection.cursor()
         try:
-            cur.executemany(sql_str, sql_params)
-        finally:
-            cur.close()
+            # Prepare parameters for each document
+            sql_params = []
+            for i, text in enumerate(texts):
+                # Get metadata for this document
+                metadata = metadatas[i] if metadatas else {}
+                
+                # Extract specific metadata fields that should go into dedicated columns
+                metadata, extracted_special_metadata = self._split_off_special_metadata(
+                    metadata
+                )
+                
+                # Prepare parameters for SQL query
+                parameters = {
+                    "content": text,  # Document text
+                    "metadata": json.dumps(
+                        HanaDB._sanitize_metadata_keys(metadata)
+                    ),  # Serialized metadata JSON
+                    "model_version": self.internal_embedding_model_id,  # Embedding model ID
+                }
+                
+                # Add specific metadata columns as separate parameters
+                parameters.update(
+                    {
+                        col: value
+                        for col, value in zip(
+                            self.specific_metadata_columns, extracted_special_metadata
+                        )
+                    }
+                )
+                
+                sql_params.append(parameters)
+    
+            # Build the SQL INSERT statement
+            
+            # Create parameter placeholders for specific metadata columns
+            specific_metadata_str = ", ".join(
+                f":{col}" for col in self.specific_metadata_columns
+            )
+            
+            # Build the column list including specific metadata columns
+            specific_metadata_columns_string = self._get_specific_metadata_columns_string()
+    
+            # Prepare the VECTOR_EMBEDDING SQL expression
+            vector_embedding_sql = "VECTOR_EMBEDDING(:content, 'DOCUMENT', :model_version)"
+            
+            # Apply type conversion if needed (e.g., convert to HALF_VECTOR if that's the column type)
+            vector_embedding_sql = self._convert_vector_embedding_to_column_type(
+                vector_embedding_sql
+            )
+    
+            # Construct the full INSERT statement
+            sql_str = (
+                f'INSERT INTO "{self.table_name}" ("{self.content_column}", '
+                f'"{self.metadata_column}", '
+                f'"{self.vector_column}"{specific_metadata_columns_string}) '
+                f"VALUES (:content, :metadata, {vector_embedding_sql} "
+                f"{(', ' + specific_metadata_str) if specific_metadata_str else ''});"
+            )
+    
+            # Execute the INSERT statement for all documents
+            cur = self.connection.cursor()
+            try:
+                cur.executemany(sql_str, sql_params)
+            except dbapi.Error as e:
+                # Provide context-aware error information for internal embedding issues
+                additional_context = {
+                    "table_name": self.table_name,
+                    "embedding_model_id": self.internal_embedding_model_id,
+                    "num_documents": len(sql_params),
+                    "has_metadata": metadatas is not None,
+                    "has_specific_metadata_columns": len(self.specific_metadata_columns) > 0,
+                    "vector_column_type": self.vector_column_type
+                }
+                handle_database_error(e, "embedding_generation", additional_context)
+            finally:
+                cur.close()
+        except Exception as e:
+            # Handle any other non-database errors
+            if not isinstance(e, dbapi.Error):
+                logger.error(f"Error adding texts with internal embeddings: {str(e)}")
+                additional_context = {
+                    "embedding_model_id": self.internal_embedding_model_id,
+                    "num_documents": len(list(texts)) if isinstance(texts, list) else "unknown",
+                    "operation": "internal_embedding_generation"
+                }
+                # Wrap errors with context
+                raise ValueError(
+                    f"Error adding texts with internal embeddings: {str(e)}\n"
+                    f"Embedding model ID: {self.internal_embedding_model_id}\n"
+                    f"Number of documents: {additional_context['num_documents']}\n"
+                    f"Verify that the embedding model ID is valid and the VECTOR_EMBEDDING function is available."
+                ) from e
+            raise
         
         # Return empty list as IDs are managed by the database
         return []
@@ -1011,7 +1131,7 @@ class HanaDB(VectorStore):
                 For external embeddings, this would be "TO_REAL_VECTOR('...')".
             k: Number of documents to return. Defaults to 4.
             filter: Optional dictionary of metadata fields and values to filter by.
-            query_params: Optional parameters for the embedding_expr SQL expression.
+            vector_embedding_params: Optional parameters for the embedding_expr SQL expression.
                 For VECTOR_EMBEDDING function: [text, model_id] for the placeholders.
                 For TO_REAL_VECTOR: None as the vector is included in the expression.
 
@@ -1068,11 +1188,37 @@ class HanaDB(VectorStore):
                     js = json.loads(row[1])
                     doc = Document(page_content=row[0], metadata=js)
                     result_vector = self._deserialize_binary_format(row[2])
-                    result.append((doc, row[3], result_vector))
-        except dbapi.Error:
+                    
+                    # Store the actual similarity score from the database
+                    similarity_score = row[3]
+                    
+                    # For Euclidean distance, normalize to [0,1] range for consistency
+                    if self.distance_strategy == DistanceStrategy.EUCLIDEAN_DISTANCE:
+                        # Lower values are better for Euclidean distance, so we want to invert the scale
+                        # First, ensure we don't divide by zero by adding a small epsilon
+                        if similarity_score > 0.0001:
+                            # Convert to a similarity score in [0,1] range (approximately)
+                            # We use 1/(1+distance) to get higher values for lower distances
+                            similarity_score = 1.0 / (1.0 + similarity_score)
+                        else:
+                            # Perfect match or very close
+                            similarity_score = 1.0
+                    
+                    result.append((doc, similarity_score, result_vector))
+        except dbapi.Error as e:
             logger.error(f"SQL Statement: {sql_str}")
             logger.error(f"Parameters: {parameters}")
-            raise
+            
+            # Provide context-aware error handling
+            additional_context = {
+                "query_type": "vector_similarity_search",
+                "distance_function": distance_func_name,
+                "embedding_expression": embedding_expr,
+                "k": k,
+                "filter_applied": filter is not None,
+                "sql_query": sql_str
+            }
+            handle_database_error(e, "similarity_search", additional_context)
         finally:
             cur.close()
         return result

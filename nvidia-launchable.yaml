@@ -1,8 +1,8 @@
 name: SAP HANA Cloud LangChain Integration with GPU Acceleration
-version: 1.0.2
+version: 1.2.0
 organization: plturrell
 collection: sap-enhanced
-description: Comprehensive solution for SAP HANA Cloud vector store operations with NVIDIA GPU acceleration, TensorRT optimization, and Jony Ive-inspired frontend
+description: Enterprise-ready solution for SAP HANA Cloud vector store operations with NVIDIA GPU acceleration, context-aware error handling, advanced documentation, and precision vector similarity scoring
 runtimeEnvironment: vm
  
 license: Apache-2.0
@@ -21,6 +21,11 @@ labels:
   - tensorrt
   - embeddings
   - large-language-models
+  - context-aware-error-handling
+  - enterprise-ready
+  - advanced-visualization
+  - vector-similarity
+  - knowledge-graph
 
 components:
   - name: api-server
@@ -68,8 +73,9 @@ documentation:
   overview: |
     # SAP HANA Cloud LangChain Integration with GPU Acceleration
     
-    This application provides GPU-accelerated vector operations for SAP HANA Cloud, 
-    enabling efficient semantic search and retrieval with LLM-powered embeddings.
+    This enterprise-ready application provides GPU-accelerated vector operations for SAP HANA Cloud, 
+    enabling efficient semantic search and retrieval with LLM-powered embeddings, context-aware 
+    error handling, and precision vector similarity scoring.
     
     ## Key Features
     
@@ -78,6 +84,12 @@ documentation:
     - Dynamic batch sizing based on GPU memory
     - Memory optimization for large operations
     - Comprehensive benchmarking tools
+    - Context-aware error handling with intelligent suggestions
+    - Operation-specific error diagnosis and troubleshooting
+    - Precise vector similarity measurements for better ranking
+    - Sophisticated normalization for consistent scoring
+    - Knowledge graph integration via SPARQL
+    - Advanced vector visualization with real-time filtering
   
   quickStart: |
     ## Quick Start
@@ -114,6 +126,8 @@ documentation:
     HANA_PORT=443
     HANA_USER=your_username
     HANA_PASSWORD=your_password
+    ENABLE_CONTEXT_AWARE_ERRORS=true
+    ENABLE_PRECISE_SIMILARITY=true
     EOL
     ```
     
@@ -142,6 +156,7 @@ documentation:
     - API documentation: http://localhost:8000/docs
     - GPU information: http://localhost:8000/benchmark/gpu_info
     - Benchmarking: http://localhost:8000/benchmark/tensorrt
+    - Error Documentation: http://localhost:8000/docs/error-handling
     
     For complete setup instructions, refer to the VM Setup Guide.
   
@@ -206,6 +221,18 @@ environment:
       description: TensorRT precision (fp16, fp32)
       required: false
       defaultValue: "fp16"
+    - name: ENABLE_CONTEXT_AWARE_ERRORS
+      description: Enable intelligent error handling with suggestions
+      required: false
+      defaultValue: "true"
+    - name: ENABLE_PRECISE_SIMILARITY
+      description: Enable accurate vector similarity measurements
+      required: false
+      defaultValue: "true"
+    - name: ERROR_VERBOSITY
+      description: Level of detail in error messages (basic, standard, detailed)
+      required: false
+      defaultValue: "standard"
 
 relatedSolutions:
   - name: NVIDIA NeMo
@@ -214,3 +241,7 @@ relatedSolutions:
     url: https://developer.nvidia.com/tensorrt
   - name: LangChain
     url: https://www.langchain.com/
+  - name: NVIDIA RAG
+    url: https://www.nvidia.com/en-us/research/generative-ai/rag/
+  - name: SAP HANA Cloud Vector Engine
+    url: https://www.sap.com/products/technology-platform/hana/cloud.html

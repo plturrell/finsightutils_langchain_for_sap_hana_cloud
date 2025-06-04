@@ -70,8 +70,32 @@ This integration provides powerful advanced capabilities:
 - **Knowledge Graph Integration**: Query knowledge graphs with natural language
 - **Asynchronous Operations**: High-throughput with async methods
 - **Internal Embeddings**: Leverage SAP HANA's built-in embedding functions
+- **Accurate Similarity Scoring**: Get precise vector similarity measurements for better ranking
+- **Context-Aware Error Handling**: Detailed error messages with suggested fixes for common issues
 
 For details on these and other advanced features, see our [Advanced Features Guide](docs/advanced_features.md).
+
+### Intelligent Error Handling
+
+The integration includes a sophisticated error handling system that provides context-aware error messages with suggested actions when problems occur:
+
+```python
+try:
+    # This will use context-aware error handling internally
+    results = vectorstore.similarity_search("my query", k=5)
+except Exception as e:
+    # Error message will include specific suggestions based on the operation
+    # and error type, such as connection issues, permissions, or data format problems
+    print(f"Error: {e}")
+```
+
+Error messages include:
+- Detailed description of what went wrong
+- Specific suggestions for fixing the issue
+- Operation context (what you were trying to do)
+- Possible underlying causes
+
+This makes troubleshooting much easier, especially for database-specific issues or vector operation problems.
 
 ## FastAPI Integration with Advanced NVIDIA GPU Acceleration
 
