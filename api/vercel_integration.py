@@ -10,14 +10,24 @@ import os
 import time
 import json
 import logging
+import sys
+import traceback
 import requests
 from typing import Dict, Any, List, Optional, Union
 from fastapi import FastAPI, Depends, HTTPException, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exception_handlers import http_exception_handler
 from pydantic import BaseModel, Field
 import jwt
 from jwt.exceptions import InvalidTokenError
+
+# Import debug handler
+try:
+    from api.debug_handler import debug_exception_handler, log_request, log_response
+    DEBUG_HANDLER_AVAILABLE = True
+except ImportError:
+    DEBUG_HANDLER_AVAILABLE = False
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -115,6 +125,7 @@ app = FastAPI(
     title="SAP HANA Cloud LangChain Integration",
     description="API for SAP HANA Cloud LangChain Integration with T4 GPU Acceleration",
     version="1.0.0",
+    debug=ENVIRONMENT != "production",  # Enable debug mode in non-production environments
 )
 
 # Add CORS middleware
@@ -129,6 +140,42 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add debug exception handler if available
+if DEBUG_HANDLER_AVAILABLE:
+    from fastapi.exceptions import RequestValidationError
+    
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        return await debug_exception_handler(request, exc)
+    
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        return await debug_exception_handler(request, exc)
+    
+    @app.middleware("http")
+    async def logging_middleware(request: Request, call_next):
+        # Log the incoming request
+        await log_request(request)
+        
+        # Process the request
+        response = await call_next(request)
+        
+        # Clone the response to log it
+        response_body = b""
+        async for chunk in response.body_iterator:
+            response_body += chunk
+        
+        # Log the response
+        await log_response(response, response_body)
+        
+        # Return a new response with the same body
+        return Response(
+            content=response_body,
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            media_type=response.media_type
+        )
 
 # Authentication functions
 def create_access_token(data: dict) -> str:

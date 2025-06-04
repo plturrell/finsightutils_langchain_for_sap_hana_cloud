@@ -2,6 +2,10 @@
   "version": 2,
   "builds": [
     {
+      "src": "api/direct_proxy.py",
+      "use": "@vercel/python"
+    },
+    {
       "src": "api/vercel_integration.py",
       "use": "@vercel/python"
     },
@@ -11,6 +15,18 @@
     }
   ],
   "routes": [
+    {
+      "src": "/debug-proxy",
+      "dest": "api/direct_proxy.py"
+    },
+    {
+      "src": "/debug-proxy/(.*)",
+      "dest": "api/direct_proxy.py"
+    },
+    {
+      "src": "/api",
+      "dest": "api/vercel_integration.py"
+    },
     {
       "src": "/api/(.*)",
       "dest": "api/vercel_integration.py"
@@ -22,12 +38,13 @@
   ],
   "env": {
     "T4_GPU_BACKEND_URL": "https://jupyter0-513syzm60.brevlab.com",
-    "ENVIRONMENT": "production",
+    "ENVIRONMENT": "development",
     "JWT_SECRET": "sap-hana-langchain-t4-integration-secret-key-2025",
     "ENABLE_CORS": "true",
     "GPU_ENABLED": "true",
     "USE_TENSORRT": "true",
     "TENSORRT_PRECISION": "int8",
-    "ENABLE_ERROR_CONTEXT": "true"
+    "ENABLE_ERROR_CONTEXT": "true",
+    "LOG_LEVEL": "DEBUG"
   }
 }
