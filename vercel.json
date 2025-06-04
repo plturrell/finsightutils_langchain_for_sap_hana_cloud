@@ -2,81 +2,32 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": {
-        "runtime": "python3.9",
-        "maxDuration": 60
-      }
+      "src": "api/vercel_integration.py",
+      "use": "@vercel/python"
     },
     {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "frontend/build",
-        "buildCommand": "cd frontend && npm install && npm run build"
-      }
+      "src": "frontend/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/index.py"
-    },
-    {
-      "src": "/static/(.*)",
-      "dest": "/frontend/build/static/$1"
-    },
-    {
-      "src": "/assets/(.*)",
-      "dest": "/frontend/build/assets/$1"
-    },
-    {
-      "src": "/favicon.ico",
-      "dest": "/frontend/build/favicon.ico"
-    },
-    {
-      "src": "/logo192.png",
-      "dest": "/frontend/build/logo192.png"
-    },
-    {
-      "src": "/logo512.png",
-      "dest": "/frontend/build/logo512.png"
-    },
-    {
-      "src": "/manifest.json",
-      "dest": "/frontend/build/manifest.json"
-    },
-    {
-      "src": "/robots.txt",
-      "dest": "/frontend/build/robots.txt"
+      "dest": "api/vercel_integration.py"
     },
     {
       "src": "/(.*)",
-      "dest": "/frontend/build/index.html"
+      "dest": "frontend/$1"
     }
   ],
   "env": {
-    "API_HOST": "0.0.0.0",
-    "API_PORT": "8000",
-    "LOG_LEVEL": "INFO",
-    "GPU_ENABLED": "false",
-    "USE_INTERNAL_EMBEDDINGS": "false",
-    "EMBEDDING_MODEL": "all-MiniLM-L6-v2",
-    "REACT_APP_API_URL": "/api",
-    "ENABLE_ERROR_CONTEXT": "true",
-    "CACHE_VECTOR_REDUCTION": "true",
-    "ENABLE_ADVANCED_CLUSTERING": "true"
-  },
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Credentials", "value": "true" },
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT" },
-        { "key": "Access-Control-Allow-Headers", "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version" }
-      ]
-    }
-  ]
+    "T4_GPU_BACKEND_URL": "https://jupyter0-513syzm60.brevlab.com",
+    "ENVIRONMENT": "production",
+    "JWT_SECRET": "sap-hana-langchain-t4-integration-secret-key-2025",
+    "ENABLE_CORS": "true",
+    "GPU_ENABLED": "true",
+    "USE_TENSORRT": "true",
+    "TENSORRT_PRECISION": "int8",
+    "ENABLE_ERROR_CONTEXT": "true"
+  }
 }
