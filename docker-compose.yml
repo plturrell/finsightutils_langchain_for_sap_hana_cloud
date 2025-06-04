@@ -2,30 +2,22 @@ version: '3'
 
 services:
   api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile.ngc
+    image: nvcr.io/nvidia/pytorch:23.12-py3
     ports:
       - "8000:8000"
-    env_file:
-      - ./api/.env
-    volumes:
-      - ./api:/app
-      - tensorrt_cache:/app/tensorrt_cache
-    restart: unless-stopped
-    runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - GPU_ENABLED=true
       - USE_TENSORRT=true
       - TENSORRT_PRECISION=fp16
+      - LOG_LEVEL=DEBUG
+      - ENABLE_CORS=true
+    runtime: nvidia
+    command: sh -c "pip install fastapi uvicorn && python -m uvicorn app:app --host 0.0.0.0 --port 8000"
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              count: 1
               capabilities: [gpu]
-
-volumes:
-  tensorrt_cache:
