@@ -29,6 +29,35 @@ JWT_SECRET = os.getenv("JWT_SECRET", "sap-hana-langchain-t4-integration-secret-k
 VERCEL_URL = os.getenv("VERCEL_URL", "")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
+# Function to handle backend request exceptions
+def handle_backend_exception(e):
+    """
+    Handles backend request exceptions with more user-friendly error messages
+    
+    Args:
+        e: The exception to handle
+        
+    Returns:
+        HTTPException with appropriate status code and detailed message
+    """
+    logger.error(f"Backend request error: {str(e)}")
+    
+    # Provide a more helpful error message
+    error_detail = str(e)
+    status_code = 503
+    
+    # Check if the error is a timeout
+    if "timeout" in error_detail.lower():
+        error_detail = f"Backend service timed out. This may be because the T4 GPU is initializing or under heavy load. Please try again in a few moments."
+    # Check if the error is a connection error
+    elif "connection" in error_detail.lower() or "connectederror" in error_detail.lower():
+        error_detail = f"Unable to connect to the T4 GPU backend. The backend service may be down or unreachable. Please verify the backend URL: {T4_GPU_BACKEND_URL}"
+    
+    return HTTPException(
+        status_code=status_code,
+        detail=error_detail
+    )
+
 # Models for API requests and responses
 class EmbeddingRequest(BaseModel):
     texts: List[str]
@@ -171,22 +200,27 @@ def validate_credentials(username: str, password: str) -> bool:
     # Check if username exists and password matches
     return username in valid_credentials and password == valid_credentials[username]
 
+# Login request model
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
 # Authentication endpoint
 @app.post("/api/auth/token", response_model=Token)
-async def login_for_access_token(username: str, password: str):
+async def login_for_access_token(request: LoginRequest):
     """Get JWT token for authentication"""
     # Validate credentials
-    if validate_credentials(username, password):
+    if validate_credentials(request.username, request.password):
         # Create token with user information
         token_data = {
-            "sub": username,
-            "role": "admin" if username == "admin" else "user"
+            "sub": request.username,
+            "role": "admin" if request.username == "admin" else "user"
         }
         access_token = create_access_token(token_data)
         return {"access_token": access_token, "token_type": "bearer"}
     
     # Log failed login attempts (for security monitoring)
-    logger.warning(f"Failed login attempt for user: {username}")
+    logger.warning(f"Failed login attempt for user: {request.username}")
     
     # Return generic error message (don't reveal if username exists)
     raise HTTPException(
@@ -207,9 +241,10 @@ async def generate_embeddings(
             raise HTTPException(status_code=401, detail="Authentication required")
         
         # Forward request to backend
+        # Use model_dump instead of dict() for newer Pydantic compatibility
         response = requests.post(
             f"{T4_GPU_BACKEND_URL}/api/embeddings",
-            json=request.dict(),
+            json=request.model_dump() if hasattr(request, 'model_dump') else request.dict(),
             timeout=30
         )
         
@@ -223,11 +258,7 @@ async def generate_embeddings(
         # Return response
         return response.json()
     except requests.RequestException as e:
-        logger.error(f"Backend request error: {str(e)}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Backend service unavailable: {str(e)}"
-        )
+        raise handle_backend_exception(e)
 
 @app.post("/api/vectorstore/search", response_model=SearchResponse)
 async def search(
@@ -241,9 +272,10 @@ async def search(
             raise HTTPException(status_code=401, detail="Authentication required")
         
         # Forward request to backend
+        # Use model_dump instead of dict() for newer Pydantic compatibility
         response = requests.post(
             f"{T4_GPU_BACKEND_URL}/api/vectorstore/search",
-            json=request.dict(),
+            json=request.model_dump() if hasattr(request, 'model_dump') else request.dict(),
             timeout=30
         )
         
@@ -257,11 +289,7 @@ async def search(
         # Return response
         return response.json()
     except requests.RequestException as e:
-        logger.error(f"Backend request error: {str(e)}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Backend service unavailable: {str(e)}"
-        )
+        raise handle_backend_exception(e)
 
 @app.post("/api/vectorstore/mmr_search", response_model=SearchResponse)
 async def mmr_search(
@@ -275,9 +303,10 @@ async def mmr_search(
             raise HTTPException(status_code=401, detail="Authentication required")
         
         # Forward request to backend
+        # Use model_dump instead of dict() for newer Pydantic compatibility
         response = requests.post(
             f"{T4_GPU_BACKEND_URL}/api/vectorstore/mmr_search",
-            json=request.dict(),
+            json=request.model_dump() if hasattr(request, 'model_dump') else request.dict(),
             timeout=30
         )
         
@@ -291,11 +320,7 @@ async def mmr_search(
         # Return response
         return response.json()
     except requests.RequestException as e:
-        logger.error(f"Backend request error: {str(e)}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Backend service unavailable: {str(e)}"
-        )
+        raise handle_backend_exception(e)
 
 @app.get("/api/health")
 async def health_check():
@@ -354,11 +379,40 @@ async def get_metrics(current_user: Optional[str] = Depends(get_current_user)):
         # Return response
         return response.json()
     except requests.RequestException as e:
-        logger.error(f"Backend request error: {str(e)}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Backend service unavailable: {str(e)}"
-        )
+        raise handle_backend_exception(e)
+
+# Root route for API information
+@app.get("/api")
+async def api_info():
+    """Get API information"""
+    return {
+        "name": "SAP HANA Cloud LangChain Integration API",
+        "version": "1.0.0",
+        "description": "API for SAP HANA Cloud LangChain Integration with T4 GPU Acceleration",
+        "endpoints": {
+            "auth": "/api/auth/token",
+            "embeddings": "/api/embeddings",
+            "search": "/api/vectorstore/search",
+            "mmr_search": "/api/vectorstore/mmr_search",
+            "health": "/api/health",
+            "metrics": "/api/metrics"
+        },
+        "status": "active"
+    }
+
+# Root endpoint for basic information
+@app.get("/")
+async def root():
+    """Root endpoint providing basic information about the API"""
+    return {
+        "message": "SAP HANA Cloud LangChain T4 GPU Integration API",
+        "version": "1.0.0",
+        "status": "active",
+        "docs": "/docs",
+        "api_info": "/api",
+        "backend_url": T4_GPU_BACKEND_URL,
+        "environment": ENVIRONMENT
+    }
 
 # Function for development/testing
 if __name__ == "__main__":
