@@ -26,11 +26,17 @@ If you have questions about one of the issues, please comment on them, and one o
 
 You are welcome to contribute code in order to fix a bug or to implement a new feature that is logged as an issue.
 
-The following rule governs code contributions:
+The following rules govern code contributions:
 
 * Contributions must be licensed under the [Apache 2.0 License](./LICENSE).
 * Due to legal reasons, contributors will be asked to accept a Developer Certificate of Origin (DCO) when they create the first pull request to this project. This happens in an automated fashion during the submission process. SAP uses [the standard DCO text of the Linux Foundation](https://developercertificate.org/).
 * Contributions must follow our [guidelines on AI-generated code](https://github.com/SAP/.github/blob/main/CONTRIBUTING_USING_GENAI.md) in case you are using such tools.
+* Code must follow our [API Design Guidelines](docs/api_design_guidelines.md) to maintain a cohesive user experience.
+* Security-sensitive code should follow our [Security Guide](docs/security_guide.md) recommendations.
+
+### Development Environment Setup
+
+Please refer to our [Setup Guide](docs/setup_guide.md) for instructions on setting up your development environment.
 
 ## Issues and Planning
 

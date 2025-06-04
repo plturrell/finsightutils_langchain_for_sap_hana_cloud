@@ -29,6 +29,7 @@ from embeddings_tensorrt import TensorRTEmbeddings, TensorRTHybridEmbeddings
 import gpu_utils
 from tensorrt_utils import TENSORRT_AVAILABLE
 import benchmark_api
+import developer_api
 
 # Configure logging
 logging.basicConfig(
@@ -53,8 +54,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include benchmark router
+# Include routers
 app.include_router(benchmark_api.router)
+app.include_router(developer_api.router)
 
 
 # Get embeddings model

@@ -37,6 +37,8 @@ import {
   AccountTree as AccountTreeIcon,
 } from '@mui/icons-material';
 import SAPLogo from './SAPLogo';
+import ErrorHandler from './ErrorHandler';
+import { useError } from '../context/ErrorContext';
 
 const drawerWidth = 280;
 
@@ -174,6 +176,8 @@ const Layout: React.FC = () => {
       </Box>
     </>
   );
+
+  const { error, clearError } = useError();
 
   return (
     <Box sx={{ display: 'flex', height: '100%' }}>
@@ -336,6 +340,11 @@ const Layout: React.FC = () => {
       >
         <Toolbar /> {/* Spacer for AppBar */}
         <Box sx={{ p: 3, flexGrow: 1, overflowY: 'auto' }}>
+          {error && (
+            <Box sx={{ mb: 3 }}>
+              <ErrorHandler error={error} onClose={clearError} />
+            </Box>
+          )}
           <Outlet />
         </Box>
       </Box>

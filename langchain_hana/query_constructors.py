@@ -161,13 +161,23 @@ class CreateWhereClause:
     ) -> Tuple[str, List]:
         if operator in LOGICAL_OPERATORS_TO_SQL:
             raise ValueError(
-                f"Did not expect oerator from {LOGICAL_OPERATORS_TO_SQL=}"
-                f", but got {operator=}"
+                f"Invalid operator format: '{operator}' is a logical operator but was used where a column operator is required. "
+                f"Logical operators ({', '.join(LOGICAL_OPERATORS_TO_SQL.keys())}) must be used at the top level of a filter. "
+                f"For column-level filtering, use operators like $eq, $ne, $lt, $gt, $contains, etc."
             )
         if operator not in COLUMN_OPERATORS:
-            raise ValueError(f"{operator=} not in {COLUMN_OPERATORS.keys()=}")
+            valid_operators = ", ".join(COLUMN_OPERATORS.keys())
+            raise ValueError(
+                f"Invalid filter operator: '{operator}' is not a supported operator for column filtering. "
+                f"Please use one of the following supported operators: {valid_operators}. "
+                f"Example: {{'column_name': {{'{list(COLUMN_OPERATORS.keys())[0]}': value}}}}"
+            )
         if not operands:
-            raise ValueError("No operands provided")
+            raise ValueError(
+                f"Missing filter value: The operator '{operator}' requires a value to filter by. "
+                f"Please provide a value appropriate for this operator. "
+                f"Example: {{'column_name': {{'{operator}': 'value_to_filter_by'}}}}"
+            )
         if operator == CONTAINS_OPERATOR:
             placeholder, value = CreateWhereClause._determine_typed_sql_placeholder(
                 operands

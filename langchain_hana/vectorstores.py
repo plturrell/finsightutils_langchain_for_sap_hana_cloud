@@ -81,8 +81,11 @@ class HanaDB(VectorStore):
             if key is distance_strategy:
                 valid_distance = True
         if not valid_distance:
+            available_strategies = ", ".join([str(s) for s in HANA_DISTANCE_FUNCTION.keys()])
             raise ValueError(
-                "Unsupported distance_strategy: {}".format(distance_strategy)
+                f"Unsupported distance_strategy: {distance_strategy}. "
+                f"Please use one of the following strategies from the DistanceStrategy enum: {available_strategies}. "
+                f"For most use cases, DistanceStrategy.COSINE is recommended."
             )
 
         self.connection = connection
@@ -100,47 +103,104 @@ class HanaDB(VectorStore):
         )
 
         # Configure the embedding (internal or external)
+        # - Internal embeddings: Use SAP HANA's built-in VECTOR_EMBEDDING function (faster, more efficient)
+        # - External embeddings: Use a Python-based embedding model (more flexible, works with any model)
         self.embedding: Embeddings
-        self.use_internal_embeddings: bool = False
-        self.internal_embedding_model_id: str = ""
-        self.set_embedding(embedding)
+        self.use_internal_embeddings: bool = False  # Flag indicating if we're using internal embeddings
+        self.internal_embedding_model_id: str = ""   # Model ID for internal embeddings
+        self.set_embedding(embedding)  # Configure the embedding approach based on the provided instance
 
         # Initialize the table if it doesn't exist
         self._initialize_table()
 
     def set_embedding(self, embedding: Embeddings) -> None:
         """
-        Use this method if you need to change the embedding instance
+        Configure the embedding approach for this vector store instance.
+        
+        This method determines whether to use internal (SAP HANA native) or external 
+        (Python-based) embeddings based on the type of the provided embedding instance.
+        
+        Args:
+            embedding: An instance of a LangChain Embeddings class. If this is an instance
+                      of HanaInternalEmbeddings, the vector store will use HANA's internal
+                      VECTOR_EMBEDDING function for all embedding operations. Otherwise,
+                      it will use the provided embedding model for generating embeddings
+                      in Python.
+                      
+        Notes:
+            - Internal embeddings (HanaInternalEmbeddings) are generally faster and more 
+              efficient as they leverage SAP HANA's native capabilities
+            - External embeddings offer more flexibility in model selection
+            - When using internal embeddings, this method validates that the specified
+              embedding function exists in your HANA instance
+            
+        Examples:
+            ```python
+            # Using internal embeddings
+            from langchain_hana.embeddings import HanaInternalEmbeddings
+            store = HanaDB(
+                connection=conn,
+                embedding=HanaInternalEmbeddings(internal_embedding_model_id="SAP_NEB.20240715")
+            )
+            
+            # Using external embeddings
+            from langchain_core.embeddings import HuggingFaceEmbeddings
+            store = HanaDB(
+                connection=conn,
+                embedding=HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+            )
+            
+            # Changing embeddings after initialization
+            store.set_embedding(new_embedding_model)
+            ```
         """
         self.embedding = embedding
         # Decide whether to use internal or external embeddings
         if isinstance(embedding, HanaInternalEmbeddings):
-            # Internal embeddings
+            # Internal embeddings - use SAP HANA's VECTOR_EMBEDDING function
             self.use_internal_embeddings = True
             self.internal_embedding_model_id = embedding.get_model_id()
-            self._validate_internal_embedding_function()
+            self._validate_internal_embedding_function()  # Ensure the embedding function exists
         else:
-            # External embeddings
+            # External embeddings - use Python-based embedding model
             self.use_internal_embeddings = False
             self.internal_embedding_model_id = ""
 
     def _initialize_table(self) -> None:
         """Create the table if it doesn't exist and validate columns."""
         if not self._table_exists(self.table_name):
+            # Using parametrized query with named parameters for table creation
+            params = {
+                "content_column": self.content_column,
+                "metadata_column": self.metadata_column,
+                "vector_column": self.vector_column,
+                "vector_column_type": self.vector_column_type,
+            }
+            
             sql_str = (
-                f'CREATE TABLE "{self.table_name}"('
-                f'"{self.content_column}" NCLOB, '
-                f'"{self.metadata_column}" NCLOB, '
-                f'"{self.vector_column}" {self.vector_column_type} '
+                'CREATE TABLE "?" '
+                '("?" NCLOB, '
+                '"?" NCLOB, '
+                '"?" ? '
             )
+            
             if self.vector_column_length in [-1, 0]:
                 sql_str += ");"
             else:
-                sql_str += f"({self.vector_column_length}));"
+                sql_str += "(?))"
+                params["vector_column_length"] = self.vector_column_length
 
             try:
                 cur = self.connection.cursor()
-                cur.execute(sql_str)
+                # Using standard HANA parametrized query execution
+                cur.execute(sql_str, 
+                           self.table_name,
+                           params["content_column"],
+                           params["metadata_column"],
+                           params["vector_column"],
+                           params["vector_column_type"],
+                           params.get("vector_column_length") if self.vector_column_length not in [-1, 0] else None
+                           )
             finally:
                 cur.close()
 
@@ -209,16 +269,40 @@ class HanaDB(VectorStore):
 
     def _validate_internal_embedding_function(self) -> None:
         """
-        Ping the database to check if the in-database embedding function
-            exists and works.
+        Validate that the specified internal embedding function exists and works in the database.
+        
+        This method tests the VECTOR_EMBEDDING function with the provided model ID by
+        executing a simple query against the database. This helps catch configuration
+        issues early, before attempting to use the embedding function in actual operations.
+        
+        Potential issues that this validation can detect:
+        1. The VECTOR_EMBEDDING function doesn't exist (older SAP HANA versions)
+        2. The specified model ID is invalid or not available
+        3. Insufficient permissions to execute the VECTOR_EMBEDDING function
+        4. Database connectivity issues
+        
         Raises:
-            ValueError: If the embedding function does not exist or fails.
+            ValueError: If the embedding model ID is None
+            Various database exceptions: If the VECTOR_EMBEDDING function doesn't exist,
+                                        the model ID is invalid, or there are permission issues
+        
+        Note:
+            This method is automatically called by set_embedding when an instance
+            of HanaInternalEmbeddings is provided.
         """
+        # Validate that a model ID was provided
         if self.internal_embedding_model_id is None:
-            raise ValueError("Internal embedding model id can't be none!")
+            raise ValueError(
+                "Internal embedding model ID cannot be None. "
+                "When using HanaInternalEmbeddings, you must specify a valid model ID such as 'SAP_NEB.20240715'. "
+                "Check SAP HANA Cloud documentation for available embedding models in your environment."
+            )
+        
+        # Execute a test query to verify the VECTOR_EMBEDDING function works with the provided model ID
         cur = self.connection.cursor()
         try:
-            # Test the VECTOR_EMBEDDING function by executing a simple query
+            # We wrap the result in TO_NVARCHAR and COUNT to ensure we get a result
+            # even if the function returns NULL or multiple rows
             cur.execute(
                 (
                     "SELECT COUNT(TO_NVARCHAR("
@@ -227,6 +311,8 @@ class HanaDB(VectorStore):
                 ),
                 model_version=self.internal_embedding_model_id,
             )
+            # Note: We don't need to check the result - if the function doesn't exist
+            # or the model ID is invalid, an exception will be raised
         finally:
             cur.close()
 
@@ -282,7 +368,10 @@ class HanaDB(VectorStore):
         if vector_column_type_upper not in VECTOR_COLUMN_SQL_TYPES:
             raise ValueError(
                 f"Unsupported vector_column_type: {vector_column_type}. "
-                f"Must be one of {', '.join(VECTOR_COLUMN_SQL_TYPES)}"
+                f"Must be one of {', '.join(VECTOR_COLUMN_SQL_TYPES)}.\n"
+                f"- REAL_VECTOR: Standard 32-bit float vector type (available in HANA Cloud QRC 1/2024+)\n"
+                f"- HALF_VECTOR: Compressed 16-bit float vector type, uses less storage (available in HANA Cloud QRC 2/2025+)\n"
+                f"For most use cases, REAL_VECTOR is recommended for compatibility and precision."
             )
         HanaDB._validate_datatype_support(connection, vector_column_type_upper)
         return vector_column_type_upper
@@ -327,15 +416,24 @@ class HanaDB(VectorStore):
             return True
 
         # Get instance version, but don't include it in error if retrieval fails
-        error_message = f"'{datatype}' is not available on this HANA instance.\n"
-
-        # Only include instance version line if it was successfully retrieved
         instance_version = HanaDB._get_instance_version(connection)
-        if instance_version:
-            error_message += f"Instance version: {instance_version}\n"
-
         min_instance_version = HanaDB._get_min_supported_version(datatype)
-        error_message += f"Minimum required instance version: {min_instance_version}"
+        
+        error_message = (
+            f"Vector type '{datatype}' is not available on your SAP HANA Cloud instance.\n\n"
+            f"Issue: Your database does not support the {datatype} data type.\n"
+        )
+        
+        if instance_version:
+            error_message += f"Your current instance version: {instance_version}\n"
+        
+        error_message += (
+            f"Required version: {min_instance_version}\n\n"
+            f"Solutions:\n"
+            f"1. Use 'REAL_VECTOR' instead (supported in older versions)\n"
+            f"2. Upgrade your SAP HANA Cloud instance to {min_instance_version} or newer\n"
+            f"3. Contact your SAP HANA Cloud administrator to check for available vector types"
+        )
 
         raise ValueError(error_message)
 
@@ -585,20 +683,54 @@ class HanaDB(VectorStore):
         embeddings: Optional[list[list[float]]] = None,
         **kwargs: Any,
     ) -> list[str]:
-        """Add texts using internal embedding function"""
+        """
+        Add texts using SAP HANA's internal embedding function.
+        
+        This method inserts documents into the vector store and generates embeddings
+        directly in the database using HANA's VECTOR_EMBEDDING function. This approach
+        offers significant performance advantages over generating embeddings in Python
+        and then inserting them, especially for large document sets.
+        
+        The method constructs a parameterized SQL INSERT statement that:
+        1. Inserts document text into the content column
+        2. Inserts serialized metadata as JSON into the metadata column
+        3. Calls VECTOR_EMBEDDING directly in the database to generate and store embeddings
+        4. Optionally extracts specific metadata fields into dedicated columns
+        
+        Args:
+            texts: Iterable of strings/text to add to the vectorstore.
+            metadatas: Optional list of metadata dictionaries, one for each text.
+            embeddings: Ignored for internal embeddings (embeddings are generated in the database).
+            **kwargs: Additional arguments (not used).
+            
+        Returns:
+            list[str]: Empty list (IDs are managed by the database).
+            
+        Note:
+            This method is automatically called by add_texts when the embedding instance
+            is of type HanaInternalEmbeddings.
+        """
+        # Prepare parameters for each document
         sql_params = []
         for i, text in enumerate(texts):
+            # Get metadata for this document
             metadata = metadatas[i] if metadatas else {}
+            
+            # Extract specific metadata fields that should go into dedicated columns
             metadata, extracted_special_metadata = self._split_off_special_metadata(
                 metadata
             )
+            
+            # Prepare parameters for SQL query
             parameters = {
-                "content": text,  # Replace `content_value` with the actual value
+                "content": text,  # Document text
                 "metadata": json.dumps(
                     HanaDB._sanitize_metadata_keys(metadata)
-                ),  # Replace `metadata_value` with the actual value
-                "model_version": self.internal_embedding_model_id,
+                ),  # Serialized metadata JSON
+                "model_version": self.internal_embedding_model_id,  # Embedding model ID
             }
+            
+            # Add specific metadata columns as separate parameters
             parameters.update(
                 {
                     col: value
@@ -606,20 +738,29 @@ class HanaDB(VectorStore):
                         self.specific_metadata_columns, extracted_special_metadata
                     )
                 }
-            )  # specific_metadata_values must align with the columns
+            )
+            
             sql_params.append(parameters)
 
+        # Build the SQL INSERT statement
+        
+        # Create parameter placeholders for specific metadata columns
         specific_metadata_str = ", ".join(
             f":{col}" for col in self.specific_metadata_columns
         )
+        
+        # Build the column list including specific metadata columns
         specific_metadata_columns_string = self._get_specific_metadata_columns_string()
 
-        # Wrap VECTOR_EMBEDDING with vector type conversion if needed
+        # Prepare the VECTOR_EMBEDDING SQL expression
         vector_embedding_sql = "VECTOR_EMBEDDING(:content, 'DOCUMENT', :model_version)"
+        
+        # Apply type conversion if needed (e.g., convert to HALF_VECTOR if that's the column type)
         vector_embedding_sql = self._convert_vector_embedding_to_column_type(
             vector_embedding_sql
         )
 
+        # Construct the full INSERT statement
         sql_str = (
             f'INSERT INTO "{self.table_name}" ("{self.content_column}", '
             f'"{self.metadata_column}", '
@@ -628,12 +769,14 @@ class HanaDB(VectorStore):
             f"{(', ' + specific_metadata_str) if specific_metadata_str else ''});"
         )
 
-        # Insert data into the table
+        # Execute the INSERT statement for all documents
         cur = self.connection.cursor()
         try:
             cur.executemany(sql_str, sql_params)
         finally:
             cur.close()
+        
+        # Return empty list as IDs are managed by the database
         return []
 
     def _get_specific_metadata_columns_string(self) -> str:
@@ -763,25 +906,64 @@ class HanaDB(VectorStore):
         self, query: str, k: int = 4, filter: Optional[dict] = None
     ) -> list[tuple[Document, float, list[float]]]:
         """
-        Return docs most similar to the given query.
+        Return docs most similar to the given query using SAP HANA's internal embedding functionality.
 
-
-        The query is vectorized in the database using HANA's internal
-        embedding function. Therefore, the embedding instance provided
-        during initialization must be of type HanaInternalEmbeddings.
-
+        This method leverages SAP HANA's native VECTOR_EMBEDDING function to generate
+        the query embedding directly in the database, which provides several advantages:
+        
+        1. Performance: Embedding generation happens within the database, reducing data transfer
+        2. Consistency: The same embedding model is used for both documents and queries
+        3. Efficiency: Avoids loading embedding models in the application server
+        4. Scalability: Can leverage SAP HANA's distributed computing resources
+        
+        To use this method, the embedding instance provided during initialization must
+        be of type HanaInternalEmbeddings. This design pattern ensures that all embedding
+        operations are consistently delegated to the database.
 
         Args:
-            query: Text to look up documents similar to.
+            query: Text to look up documents similar to. This will be passed to
+                  HANA's VECTOR_EMBEDDING function for embedding generation.
             k: Number of Documents to return. Defaults to 4.
             filter: A dictionary of metadata fields and values to filter by.
-                    Defaults to None.
+                   Defaults to None. Supports nested filtering with logical operators
+                   and various comparison operators for more precise results.
 
         Returns:
             List of tuples, each containing:
             - Document: The matched document with its content and metadata
-            - float: The similarity score
+            - float: The similarity score (higher is better for cosine similarity)
             - list[float]: The document's embedding vector
+            
+        Raises:
+            TypeError: If self.embedding is not an instance of HanaInternalEmbeddings
+            
+        Example:
+            ```python
+            # Create vectorstore with internal embeddings
+            from langchain_hana import HanaVectorStore
+            from langchain_hana.embeddings import HanaInternalEmbeddings
+            
+            vectorstore = HanaVectorStore(
+                connection=conn,
+                embedding=HanaInternalEmbeddings(internal_embedding_model_id="SAP_NEB.20240715"),
+                table_name="MY_VECTORS"
+            )
+            
+            # Search with query text - embedding happens in the database
+            results = vectorstore.similarity_search_with_score_and_vector_by_query(
+                query="What is SAP HANA Cloud?",
+                k=5,
+                filter={"category": "database"}
+            )
+            
+            # Process results
+            for doc, score, vector in results:
+                print(f"Content: {doc.page_content[:50]}...")
+                print(f"Score: {score}")
+                print(f"Vector dimension: {len(vector)}")
+                print(f"Metadata: {doc.metadata}")
+                print()
+            ```
         """
         # Check if the embedding instance is of the correct type
         if not isinstance(self.embedding, HanaInternalEmbeddings):
@@ -791,13 +973,20 @@ class HanaDB(VectorStore):
                 "similarity_search_with_score_and_vector_by_query"
             )
 
+        # Prepare the SQL expression for VECTOR_EMBEDDING
         embedding_expr = "VECTOR_EMBEDDING(?, 'QUERY', ?)"
+        
         # Wrap VECTOR_EMBEDDING with vector type conversion if needed
+        # (e.g., if vector_column_type is HALF_VECTOR, convert the REAL_VECTOR output
+        # of VECTOR_EMBEDDING to HALF_VECTOR using TO_HALF_VECTOR)
         vector_embedding_sql = self._convert_vector_embedding_to_column_type(
             embedding_expr
         )
 
+        # Parameters for the VECTOR_EMBEDDING function
         vector_embedding_params = [query, self.internal_embedding_model_id]
+        
+        # Execute the similarity search using the database-generated embedding
         return self._similarity_search_with_score_and_vector(
             vector_embedding_sql,
             vector_embedding_params=vector_embedding_params,
@@ -1035,13 +1224,47 @@ class HanaDB(VectorStore):
 
     def _embed_query_hana_internal(self, query: str) -> list[float]:
         """
-        Generates query embedding using HANA's internal embedding engine.
+        Generate query embedding using SAP HANA's internal embedding engine.
+        
+        This method executes a SQL query that calls HANA's VECTOR_EMBEDDING function
+        to generate an embedding vector for the query text. The embedding is generated
+        entirely within the database, which provides performance and consistency benefits.
+        
+        Key advantages of this approach:
+        1. Uses the same embedding model for queries as for documents
+        2. Avoids loading embedding models in the application server
+        3. Leverages SAP HANA's optimized implementation
+        4. Ensures consistent vector representations
+        
+        Args:
+            query: The text to generate an embedding for
+            
+        Returns:
+            list[float]: The embedding vector as a list of floats
+            
+        Raises:
+            ValueError: If no result is returned by the database
+            Various database exceptions: If there are issues with the database connection
+                                        or the VECTOR_EMBEDDING function
+        
+        Note:
+            This method is used internally by max_marginal_relevance_search when using
+            HanaInternalEmbeddings, and can also be used by application code that needs
+            direct access to the embedding vectors.
         """
+        # Prepare the VECTOR_EMBEDDING SQL expression
         vector_embedding_sql = "VECTOR_EMBEDDING(:content, 'QUERY', :model_version)"
+        
+        # Apply any necessary type conversion (e.g., to HALF_VECTOR if needed)
         vector_embedding_sql = self._convert_vector_embedding_to_column_type(
             vector_embedding_sql
         )
+        
+        # Construct the full SQL query
+        # We use sys.DUMMY to execute a simple query that doesn't need a table
         sql_str = f"SELECT {vector_embedding_sql} FROM sys.DUMMY;"
+        
+        # Execute the query
         cur = self.connection.cursor()
         try:
             cur.execute(
@@ -1049,8 +1272,11 @@ class HanaDB(VectorStore):
                 content=query,
                 model_version=self.internal_embedding_model_id,
             )
+            
+            # Process the result
             if cur.has_result_set():
                 res = cur.fetchall()
+                # Convert the binary vector format to a list of floats
                 return self._deserialize_binary_format(res[0][0])
             else:
                 raise ValueError("No result set returned for query embedding.")

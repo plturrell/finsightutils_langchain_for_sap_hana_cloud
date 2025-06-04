@@ -45,16 +45,33 @@ connection = dbapi.connect(
     address="<hostname>",
     port=3<NN>MM,
     user="<username>",
-    password="<password>"
+    password="<password>",
+    encrypt=True,  # Recommended for production
+    sslValidateCertificate=True  # Recommended for production
 )
 
 # Initialize the HanaDB vector store
 vectorstore = HanaDB(
     connection=connection,
-    embeddings=internal_emb,  # or external_emb
+    embedding=internal_emb,  # or external_emb
     table_name="<table_name>"  # Optional: Default is "EMBEDDINGS"
 )
 ```
+
+For detailed configuration options and recommended settings, see our [Configuration Guide](docs/configuration_guide.md).
+
+## Advanced Features
+
+This integration provides powerful advanced capabilities:
+
+- **HNSW Vector Indexing**: Accelerate similarity searches with configurable indexing
+- **Maximal Marginal Relevance**: Balance relevance and diversity in search results
+- **Complex Metadata Filtering**: Filter results using rich query operators
+- **Knowledge Graph Integration**: Query knowledge graphs with natural language
+- **Asynchronous Operations**: High-throughput with async methods
+- **Internal Embeddings**: Leverage SAP HANA's built-in embedding functions
+
+For details on these and other advanced features, see our [Advanced Features Guide](docs/advanced_features.md).
 
 ## FastAPI Integration with Advanced NVIDIA GPU Acceleration
 
@@ -152,7 +169,19 @@ For detailed information about the CI/CD setup, see our [CI/CD Guide](docs/cicd_
 
 This project is open to feature requests/suggestions, bug reports etc. via [GitHub issues](https://github.com/SAP/langchain-integration-for-sap-hana-cloud/issues). Contribution and feedback are encouraged and always welcome. For more information about how to contribute, the project structure, as well as additional contribution information, see our [Contribution Guidelines](CONTRIBUTING.md).
 
-## Security / Disclosure
+## Security
+
+### Production Security Guide
+For comprehensive security guidance when deploying in production environments, please review our [Security Guide](docs/security_guide.md) which covers:
+- Secure connection configuration
+- Credential management best practices
+- Principle of least privilege implementation
+- Network security recommendations
+- Connection pooling for production
+- Data security considerations
+- Monitoring and alerting
+
+### Security Disclosure
 If you find any bug that may be a security problem, please follow our instructions at [in our security policy](https://github.com/SAP/langchain-integration-for-sap-hana-cloud/security/policy) on how to report it. Please do not create GitHub issues for security-related doubts or problems.
 
 ## Code of Conduct

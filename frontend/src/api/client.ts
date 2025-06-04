@@ -30,23 +30,72 @@ apiClient.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Handle specific error codes or add custom error messages
+    // Standardize and log error information
     if (error.response) {
       // The request was made and the server responded with a status code
       // that falls out of the range of 2xx
       console.error('API Error Response:', error.response.data);
       
-      // You can handle specific status codes here
+      // Format the error to match our error handler component expectations
+      if (error.response.data && typeof error.response.data === 'object') {
+        // If the error already has a detail property, make sure it's properly formatted
+        if (!error.response.data.detail) {
+          error.response.data = { 
+            detail: error.response.data 
+          };
+        }
+      } else {
+        // If the error response is not an object or doesn't have expected structure
+        error.response.data = { 
+          detail: { 
+            message: typeof error.response.data === 'string' 
+              ? error.response.data 
+              : 'An unexpected error occurred', 
+            original_error: JSON.stringify(error.response.data)
+          } 
+        };
+      }
+      
+      // Handle specific status codes
       if (error.response.status === 401) {
         // Handle unauthorized error (e.g., redirect to login)
         console.log('Unauthorized access, please login');
+        // You could trigger a redirect or auth flow here
       }
     } else if (error.request) {
       // The request was made but no response was received
       console.error('API No Response Error:', error.request);
+      error.response = {
+        status: 0,
+        statusText: 'No Response',
+        data: {
+          detail: {
+            message: 'The server did not respond. Please check your network connection and try again.',
+            suggestions: [
+              'Verify that the API server is running.',
+              'Check your network connection.',
+              'Try the operation again after a brief delay.'
+            ]
+          }
+        }
+      };
     } else {
       // Something happened in setting up the request that triggered an Error
       console.error('API Request Error:', error.message);
+      error.response = {
+        status: 0,
+        statusText: 'Request Failed',
+        data: {
+          detail: {
+            message: error.message || 'An unexpected error occurred.',
+            suggestions: [
+              'Check your network connection.',
+              'Try refreshing the page.',
+              'Contact support if the problem persists.'
+            ]
+          }
+        }
+      };
     }
     
     return Promise.reject(error);
