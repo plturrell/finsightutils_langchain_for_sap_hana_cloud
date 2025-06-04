@@ -12,8 +12,11 @@ services:
       - TENSORRT_PRECISION=fp16
       - LOG_LEVEL=DEBUG
       - ENABLE_CORS=true
+    volumes:
+      - ./app.py:/app/app.py
+    working_dir: /app
     runtime: nvidia
-    command: sh -c "pip install fastapi uvicorn && python -m uvicorn app:app --host 0.0.0.0 --port 8000"
+    command: bash -c "pip install fastapi uvicorn pydantic && python -m uvicorn app:app --host 0.0.0.0 --port 8000"
     deploy:
       resources:
         reservations:
