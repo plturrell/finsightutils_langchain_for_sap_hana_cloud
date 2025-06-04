@@ -1,6 +1,16 @@
-"""FastAPI application for SAP HANA Cloud vector store integration."""
+"""FastAPI application for SAP HANA Cloud vector store integration.
 
+This module sets up the FastAPI application and includes all routes
+for different deployment platforms. It supports multiple deployment options:
+- NVIDIA LaunchPad (GPU-accelerated)
+- Together.ai (managed AI platform)
+- SAP BTP (enterprise platform)
+- Vercel (serverless)
+"""
+
+import os
 import logging
+import time
 from typing import Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -30,6 +40,12 @@ import gpu_utils
 from tensorrt_utils import TENSORRT_AVAILABLE
 import benchmark_api
 import developer_api
+from health import router as health_router
+
+# Detect platform
+PLATFORM = os.environ.get("PLATFORM", "unknown")
+VERSION = os.environ.get("VERSION", "1.2.0")
+PLATFORM_SUPPORTS_GPU = os.environ.get("PLATFORM_SUPPORTS_GPU", "false").lower() == "true"
 
 # Configure logging
 logging.basicConfig(
@@ -42,7 +58,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="SAP HANA Cloud Vector Store API",
     description="API for SAP HANA Cloud vector store operations with GPU acceleration",
-    version="1.0.0",
+    version=VERSION,
 )
 
 # Add CORS middleware
@@ -54,9 +70,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Request processing time middleware
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    """Add processing time header to responses."""
+    start_time = time.time()
+    try:
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        response.headers["X-Process-Time"] = str(process_time)
+        response.headers["X-Platform"] = PLATFORM
+        response.headers["X-API-Version"] = VERSION
+        return response
+    except Exception as e:
+        logger.error(f"Error processing request: {str(e)}")
+        process_time = time.time() - start_time
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Internal server error",
+                "message": str(e),
+                "context": {
+                    "operation": "api_request",
+                    "suggestion": "Please check your input parameters and try again",
+                    "process_time": process_time
+                }
+            },
+            headers={
+                "X-Process-Time": str(process_time),
+                "X-Platform": PLATFORM,
+                "X-API-Version": VERSION
+            }
+        )
+
 # Include routers
 app.include_router(benchmark_api.router)
 app.include_router(developer_api.router)
+app.include_router(health_router)
 
 
 # Get embeddings model
@@ -178,30 +228,24 @@ async def root():
     return {"message": "SAP HANA Cloud Vector Store API with NVIDIA GPU Acceleration"}
 
 
+# Legacy health check endpoint - redirects to new health router
 @app.get("/health")
-async def health_check(connection: dbapi.Connection = Depends(get_db_connection)):
-    """Health check endpoint."""
-    try:
-        # Simple query to check database connection
-        cursor = connection.cursor()
-        cursor.execute("SELECT 1 FROM DUMMY")
-        cursor.close()
-        
-        # Check GPU status
-        gpu_status = "available" if gpu_utils.is_gpu_available() else "unavailable"
-        gpu_info = gpu_utils.get_gpu_info()
-        gpu_count = gpu_info.get("device_count", 0)
-        
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "gpu_acceleration": gpu_status,
-            "gpu_count": gpu_count,
-            "gpu_info": gpu_info.get("devices", []),
-        }
-    except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
+async def legacy_health_check():
+    """Legacy health check endpoint that redirects to the new comprehensive health check."""
+    return {
+        "status": "ok",
+        "message": "For more detailed health information, use the new health endpoints:",
+        "endpoints": {
+            "basic_health": "/api/health",
+            "system_info": "/api/health/system",
+            "database_status": "/api/health/database",
+            "gpu_status": "/api/health/gpu",
+            "comprehensive": "/api/health/complete",
+            "prometheus_metrics": "/api/health/metrics"
+        },
+        "platform": PLATFORM,
+        "version": VERSION
+    }
 
 
 @app.post("/texts", response_model=APIResponse)

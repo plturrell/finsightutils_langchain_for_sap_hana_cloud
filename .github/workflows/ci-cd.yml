@@ -1,0 +1,274 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master, dev, feature/*, release/*]
+  pull_request:
+    branches: [main, master, dev]
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: 'Deployment target'
+        required: true
+        default: 'together_vercel'
+        type: choice
+        options:
+        - together_vercel
+        - nvidia_vercel
+        - sap_sap
+        - vercel_vercel
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+        - dev
+        - test
+        - staging
+        - prod
+
+env:
+  PYTHON_VERSION: '3.10'
+  NODE_VERSION: '18'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+          pip install pytest pytest-cov
+      
+      - name: Run tests
+        run: pytest tests/ --cov=langchain_hana --cov-report=xml
+      
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+  
+  build-backend:
+    name: Build Backend
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+          pip install build wheel
+      
+      - name: Build package
+        run: python -m build
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-dist
+          path: dist/
+  
+  build-frontend:
+    name: Build Frontend
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-dist
+          path: frontend/build/
+  
+  deploy:
+    name: Deploy
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+    
+    env:
+      DEPLOY_TARGET: ${{ github.event.inputs.deploy_target || 'together_vercel' }}
+      ENVIRONMENT: ${{ github.event.inputs.environment || 'prod' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Download backend artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: backend-dist
+          path: dist/
+      
+      - name: Download frontend artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-dist
+          path: frontend/build/
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Install deployment dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      
+      - name: Parse deployment target
+        id: parse_target
+        run: |
+          TARGET=${{ env.DEPLOY_TARGET }}
+          BACKEND=$(echo $TARGET | cut -d'_' -f1)
+          FRONTEND=$(echo $TARGET | cut -d'_' -f2)
+          echo "BACKEND=$BACKEND" >> $GITHUB_ENV
+          echo "FRONTEND=$FRONTEND" >> $GITHUB_ENV
+          echo "Backend: $BACKEND, Frontend: $FRONTEND" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Set up backend config
+        run: |
+          BACKEND_ENV_FILE=".env.${BACKEND}.${ENVIRONMENT}"
+          if [ -f "$BACKEND_ENV_FILE" ]; then
+            cp "$BACKEND_ENV_FILE" api/.env
+            echo "Configured backend with $BACKEND_ENV_FILE" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Error: Backend env file $BACKEND_ENV_FILE not found" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+      
+      - name: Set up frontend config
+        run: |
+          FRONTEND_ENV_FILE=".env.frontend.${FRONTEND}.${ENVIRONMENT}"
+          if [ -f "$FRONTEND_ENV_FILE" ]; then
+            cp "$FRONTEND_ENV_FILE" frontend/.env
+            echo "Configured frontend with $FRONTEND_ENV_FILE" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Error: Frontend env file $FRONTEND_ENV_FILE not found" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+      
+      # Deploy backend based on target
+      - name: Deploy backend to Together.ai
+        if: env.BACKEND == 'together'
+        run: |
+          chmod +x scripts/deploy_to_together.sh
+          ./scripts/deploy_to_together.sh
+        env:
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+      
+      - name: Deploy backend to NVIDIA LaunchPad
+        if: env.BACKEND == 'nvidia'
+        run: |
+          chmod +x scripts/deploy_to_nvidia.sh
+          ./scripts/deploy_to_nvidia.sh
+        env:
+          NGC_API_KEY: ${{ secrets.NGC_API_KEY }}
+      
+      - name: Deploy backend to SAP BTP
+        if: env.BACKEND == 'sap'
+        run: |
+          chmod +x scripts/deploy_to_sap_btp.sh
+          ./scripts/deploy_to_sap_btp.sh
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+      
+      - name: Deploy backend to Vercel
+        if: env.BACKEND == 'vercel'
+        uses: amondnet/vercel-action@v20
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_BACKEND }}
+          working-directory: api
+          vercel-args: '--prod'
+      
+      # Deploy frontend based on target
+      - name: Deploy frontend to Vercel
+        if: env.FRONTEND == 'vercel'
+        uses: amondnet/vercel-action@v20
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_FRONTEND }}
+          working-directory: frontend
+          vercel-args: '--prod'
+      
+      - name: Deploy frontend to SAP BTP
+        if: env.FRONTEND == 'sap'
+        run: |
+          chmod +x scripts/deploy_frontend_to_sap_btp.sh
+          ./scripts/deploy_frontend_to_sap_btp.sh
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+  
+  notify:
+    name: Notify
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Notify success
+        if: needs.deploy.result == 'success'
+        run: |
+          echo "Deployment successful!" >> $GITHUB_STEP_SUMMARY
+          echo "Backend: ${{ env.BACKEND }}" >> $GITHUB_STEP_SUMMARY
+          echo "Frontend: ${{ env.FRONTEND }}" >> $GITHUB_STEP_SUMMARY
+          echo "Environment: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Notify failure
+        if: needs.deploy.result != 'success'
+        run: |
+          echo "Deployment failed!" >> $GITHUB_STEP_SUMMARY
