@@ -1,14 +1,25 @@
 name: SAP HANA Cloud LangChain Integration with GPU Acceleration
-version: 1.2.0
+version: 1.3.0
 organization: plturrell
 collection: sap-enhanced
-description: Enterprise-ready solution for SAP HANA Cloud vector store operations with NVIDIA GPU acceleration, context-aware error handling, advanced documentation, and precision vector similarity scoring
+description: Enterprise-ready solution for SAP HANA Cloud vector store operations with NVIDIA GPU acceleration, TensorRT optimization, interactive 3D visualizations, and precision vector similarity scoring
 runtimeEnvironment: vm
  
 license: Apache-2.0
 maintainer: plturrell@github.com
 supportContact: support@example.com
 supportUrl: https://github.com/plturrell/langchain-integration-for-sap-hana-cloud/issues
+
+# NGC Blueprint compatibility metadata
+compatibility:
+  ngc:
+    blueprint: true
+    minDriverVersion: "520.0"
+    cuda: ">=11.8"
+    tensorrt: ">=8.6.0"
+    frameworks:
+      - pytorch: ">=2.0.0"
+      - transformers: ">=4.30.0"
 
 container:
   image: nvcr.io/plturrell/sap-enhanced/langchain-hana-gpu:latest
@@ -37,12 +48,40 @@ components:
           protocol: TCP
           # Local port only, no internet exposure required
           expose: false
+      env:
+        - name: GPU_ENABLED
+          value: "true"
+        - name: USE_TENSORRT
+          value: "true"
+        - name: TENSORRT_PRECISION
+          value: "fp16"
+        - name: ENABLE_CONTEXT_AWARE_ERRORS
+          value: "true"
+        - name: ENABLE_PRECISE_SIMILARITY
+          value: "true"
+      volumes:
+        - name: trt-engines
+          mountPath: /app/trt_engines
+          hostPath: /opt/nvidia/trt_engines
     resources:
       gpu:
         required: true
         count: 1
-        productFamily: ["Tesla", "Quadro", "RTX", "A100", "H100"]
+        productFamily: ["Tesla", "Quadro", "RTX", "A100", "H100", "A10", "A30", "A40", "T4"]
         memory: 16Gi
+        recommendedModels:
+          - name: "NVIDIA T4"
+            description: "Cost-effective inference GPU"
+            memory: "16GB"
+            performance: "Good for small to medium workloads"
+          - name: "NVIDIA A10"
+            description: "Mid-range inference GPU"
+            memory: "24GB"
+            performance: "Excellent for medium to large workloads"
+          - name: "NVIDIA A100"
+            description: "High-end data center GPU"
+            memory: "40GB/80GB"
+            performance: "Best for high-throughput production workloads"
       memory:
         min: 8Gi
         recommended: 16Gi
@@ -196,43 +235,154 @@ requirements:
 
 environment:
   variables:
+    # SAP HANA Cloud Connection Settings
     - name: HANA_HOST
       description: SAP HANA Cloud host
       required: true
+      category: "Connection"
+      
     - name: HANA_PORT
       description: SAP HANA Cloud port
       required: true
       defaultValue: "443"
+      category: "Connection"
+      
     - name: HANA_USER
       description: SAP HANA Cloud username
       required: true
+      category: "Connection"
+      
     - name: HANA_PASSWORD
       description: SAP HANA Cloud password
       required: true
+      category: "Connection"
+      
+    - name: DB_MAX_CONNECTIONS
+      description: Maximum number of database connections
+      required: false
+      defaultValue: "5"
+      category: "Connection"
+      
+    - name: DB_CONNECTION_TIMEOUT
+      description: Database connection timeout in seconds
+      required: false
+      defaultValue: "600"
+      category: "Connection"
+      
+    # GPU Acceleration Settings
     - name: GPU_ENABLED
       description: Enable GPU acceleration
       required: false
       defaultValue: "true"
+      category: "GPU"
+      
     - name: USE_TENSORRT
       description: Enable TensorRT optimization
       required: false
       defaultValue: "true"
+      category: "GPU"
+      
     - name: TENSORRT_PRECISION
-      description: TensorRT precision (fp16, fp32)
+      description: TensorRT precision (fp16, fp32, int8)
       required: false
       defaultValue: "fp16"
+      category: "GPU"
+      options: ["fp16", "fp32", "int8"]
+      
+    - name: TENSORRT_ENGINE_CACHE_DIR
+      description: Directory to cache compiled TensorRT engines
+      required: false
+      defaultValue: "/app/trt_engines"
+      category: "GPU"
+      
+    - name: BATCH_SIZE
+      description: Default batch size for embedding operations
+      required: false
+      defaultValue: "32"
+      category: "GPU"
+      
+    - name: MAX_BATCH_SIZE
+      description: Maximum batch size for embedding operations
+      required: false
+      defaultValue: "128"
+      category: "GPU"
+      
+    - name: ENABLE_MULTI_GPU
+      description: Enable multiple GPU support
+      required: false
+      defaultValue: "true"
+      category: "GPU"
+      
+    # Error Handling Settings
     - name: ENABLE_CONTEXT_AWARE_ERRORS
       description: Enable intelligent error handling with suggestions
       required: false
       defaultValue: "true"
-    - name: ENABLE_PRECISE_SIMILARITY
-      description: Enable accurate vector similarity measurements
-      required: false
-      defaultValue: "true"
+      category: "Error Handling"
+      
     - name: ERROR_VERBOSITY
       description: Level of detail in error messages (basic, standard, detailed)
       required: false
       defaultValue: "standard"
+      category: "Error Handling"
+      options: ["basic", "standard", "detailed"]
+      
+    - name: ENABLE_ERROR_TELEMETRY
+      description: Enable error tracking and telemetry
+      required: false
+      defaultValue: "true"
+      category: "Error Handling"
+      
+    # Embedding and Vector Settings
+    - name: ENABLE_PRECISE_SIMILARITY
+      description: Enable accurate vector similarity measurements
+      required: false
+      defaultValue: "true"
+      category: "Vector Operations"
+      
+    - name: DEFAULT_EMBEDDING_MODEL
+      description: Default embedding model to use
+      required: false
+      defaultValue: "sentence-transformers/all-MiniLM-L6-v2"
+      category: "Vector Operations"
+      
+    - name: DEFAULT_TABLE_NAME
+      description: Default vector table name in SAP HANA Cloud
+      required: false
+      defaultValue: "EMBEDDINGS"
+      category: "Vector Operations"
+      
+    - name: ENABLE_VECTOR_VISUALIZATION
+      description: Enable interactive 3D vector visualization
+      required: false
+      defaultValue: "true"
+      category: "Visualization"
+      
+    # API Settings
+    - name: ENABLE_CORS
+      description: Enable CORS support
+      required: false
+      defaultValue: "true"
+      category: "API"
+      
+    - name: CORS_ORIGINS
+      description: Allowed CORS origins (comma-separated)
+      required: false
+      defaultValue: "*"
+      category: "API"
+      
+    - name: JWT_SECRET
+      description: Secret for JWT authentication
+      required: false
+      defaultValue: "sap-hana-langchain-integration-secret-key"
+      category: "API"
+      
+    - name: LOG_LEVEL
+      description: Logging level
+      required: false
+      defaultValue: "INFO"
+      category: "API"
+      options: ["DEBUG", "INFO", "WARNING", "ERROR"]
 
 relatedSolutions:
   - name: NVIDIA NeMo

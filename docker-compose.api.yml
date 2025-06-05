@@ -1,0 +1,42 @@
+version: '3.8'
+
+name: sap-hana-langchain-api
+
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: sap-hana-langchain/api:latest
+    container_name: sap-hana-langchain-api
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - ENABLE_CORS=true
+      - CORS_ORIGINS=${FRONTEND_URL:-*}
+      - JWT_SECRET=${JWT_SECRET:-sap-hana-langchain-integration-secret-key}
+      - ENABLE_ERROR_CONTEXT=true
+      - DB_MAX_CONNECTIONS=5
+      - DB_CONNECTION_TIMEOUT=600
+      - HANA_HOST=${HANA_HOST}
+      - HANA_PORT=${HANA_PORT:-443}
+      - HANA_USER=${HANA_USER}
+      - HANA_PASSWORD=${HANA_PASSWORD}
+      - DEFAULT_TABLE_NAME=${DEFAULT_TABLE_NAME:-EMBEDDINGS}
+      # GPU settings (ignored if no GPU available)
+      - GPU_ENABLED=${GPU_ENABLED:-false}
+      - USE_TENSORRT=${USE_TENSORRT:-false}
+      - TENSORRT_PRECISION=${TENSORRT_PRECISION:-fp16}
+    volumes:
+      - ./api/data:/app/data
+      - ./api/logs:/app/logs
+      - ./api/config:/app/config
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

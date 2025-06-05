@@ -1,0 +1,204 @@
+/* SAP HANA Cloud LangChain Integration - Vector Visualization Styles */
+
+.vector-vis-container {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: box-shadow 0.3s ease;
+}
+
+.vector-vis-container:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.vector-vis-canvas {
+    width: 100%;
+    height: 100%;
+    background-color: #f8f9fa;
+}
+
+.vector-vis-controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 100;
+}
+
+.vector-vis-info {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 10px;
+    display: none;
+    max-height: 30%;
+    overflow-y: auto;
+    border-top: 1px solid #ddd;
+    transition: background-color 0.3s ease;
+}
+
+.vector-vis-info-title {
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.vector-vis-info-content {
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+}
+
+.vector-vis-info-similarity {
+    margin-top: 8px;
+}
+
+.vector-vis-legend {
+    display: flex;
+    justify-content: center;
+    margin-top: 8px;
+    font-size: 0.9rem;
+}
+
+.vector-vis-legend > div {
+    margin: 0 10px;
+    display: flex;
+    align-items: center;
+}
+
+.vector-vis-legend span {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+.vector-vis-legend-query {
+    background-color: #ff3e00;
+}
+
+.vector-vis-legend-point {
+    background-color: #0070f3;
+}
+
+.vector-vis-legend-selected {
+    background-color: #00c853;
+}
+
+.vector-vis-placeholder {
+    color: #666;
+    text-align: center;
+    padding: 20px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Dark mode styles */
+.dark-mode .vector-vis-canvas {
+    background-color: #2a2a2a;
+}
+
+.dark-mode .vector-vis-info {
+    background: rgba(40, 40, 40, 0.9);
+    color: #f0f0f0;
+    border-top: 1px solid #444;
+}
+
+.dark-mode .vector-vis-placeholder {
+    color: #aaa;
+}
+
+.dark-mode .vector-vis-controls .btn-light {
+    background-color: #444;
+    border-color: #555;
+    color: #eee;
+}
+
+/* High contrast mode */
+.high-contrast .vector-vis-legend-query {
+    background-color: #ff0000;
+}
+
+.high-contrast .vector-vis-legend-point {
+    background-color: #0000ff;
+}
+
+.high-contrast .vector-vis-legend-selected {
+    background-color: #00ff00;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .vector-vis-container {
+        height: 60vh !important;
+    }
+    
+    .vector-vis-info {
+        max-height: 40%;
+        padding: 8px;
+    }
+    
+    .vector-vis-info-title {
+        font-size: 1rem;
+    }
+    
+    .vector-vis-info-content {
+        font-size: 0.8rem;
+    }
+    
+    .vector-vis-controls {
+        top: 5px;
+        right: 5px;
+    }
+    
+    .vector-vis-controls .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .vector-vis-legend {
+        flex-wrap: wrap;
+        font-size: 0.8rem;
+    }
+}
+
+/* Colorblind-friendly mode */
+.colorblind-mode .vector-vis-legend-query {
+    background-color: #E69F00; /* Orange */
+}
+
+.colorblind-mode .vector-vis-legend-point {
+    background-color: #56B4E9; /* Blue */
+}
+
+.colorblind-mode .vector-vis-legend-selected {
+    background-color: #009E73; /* Green */
+}
+
+/* Accessibility focus indicators */
+.vector-vis-container:focus {
+    outline: 3px solid #0070f3;
+    outline-offset: 2px;
+}
+
+.vector-vis-controls .btn:focus {
+    outline: 3px solid #0070f3;
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+/* Screen reader only text */
+.visually-hidden {
+    clip: rect(0 0 0 0); 
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap; 
+    width: 1px;
+}

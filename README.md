@@ -101,82 +101,133 @@ Error messages include:
 
 This makes troubleshooting much easier, especially for database-specific issues or vector operation problems.
 
-## FastAPI Integration with Advanced NVIDIA GPU Acceleration
+## Split Architecture with Frontend and Backend Components
 
-This repository includes a production-ready FastAPI application for SAP HANA Cloud vector store operations in the `api/` directory. The API provides endpoints for all vector store operations with proper error handling and logging, and includes advanced NVIDIA GPU acceleration for high-performance embedding and vector operations.
+This repository uses a split architecture with separate frontend and backend components for more flexible deployment options:
 
-### API Features
+1. **Backend API**: A FastAPI application with GPU acceleration for vector operations
+2. **Frontend**: A responsive web application with interactive visualizations
+
+This architecture allows for various deployment scenarios:
+- Frontend on Vercel with backend on Docker/Kubernetes
+- Both components on Docker
+- Frontend as static files with backend on a server
+- Complete stack on NVIDIA NGC Blueprint platform
+
+## NVIDIA NGC Blueprint Compatibility
+
+This project is fully optimized for NVIDIA GPUs and complies with NVIDIA NGC Blueprint standards:
+
+- **CUDA-Accelerated**: Leverages CUDA for high-performance embedding generation
+- **TensorRT Optimized**: Uses TensorRT for maximum inference throughput
+- **NGC Container Based**: Built on official NVIDIA NGC PyTorch containers
+- **Multi-GPU Support**: Automatically scales across all available GPUs
+- **NGC Blueprint Ready**: Includes complete NGC Blueprint configuration
+- **Performance Optimized**: Tuned for T4, A10, A100, and H100 GPUs
+
+The repository includes automated build scripts for NGC deployment:
+```bash
+# Build and push to NGC
+./build_launchable.sh
+```
+
+### Backend API with Advanced NVIDIA GPU Acceleration
+
+The backend API in the `api/` directory provides:
 
 - Secure connection to SAP HANA Cloud
 - Vector store operations (add, query, delete)
-- Similarity search with filtering
-- Max Marginal Relevance (MMR) search
-- **Advanced NVIDIA GPU Acceleration** for embeddings and vector operations
+- Similarity search with filtering and MMR search
+- **Advanced NVIDIA GPU Acceleration** for embeddings
 - Automatic GPU detection with CPU fallback
-- Docker support for easy deployment
-- Performance benchmarking tools
+- JWT authentication and error handling
+- Comprehensive telemetry and metrics
 
-### Advanced GPU Acceleration
+#### Advanced GPU Acceleration
 
 The API includes sophisticated GPU acceleration features:
 
-- **Multi-GPU Load Balancing**: Automatically distributes workloads across all available GPUs
-- **Dynamic Batch Size Adjustment**: Optimizes batch sizes based on available GPU memory
-- **Memory Optimization**: Advanced techniques for handling large embedding operations
-- **Performance Benchmarking**: Built-in tools to compare CPU vs GPU performance
+- **Multi-GPU Load Balancing**: Automatically distributes workloads across GPUs
+- **Dynamic Batch Size Adjustment**: Optimizes batch sizes based on GPU memory
+- **TensorRT Optimization**: High-performance inference with TensorRT
+- **Mixed Precision Support**: FP32, FP16, and INT8 precision options
 
-These features ensure maximum performance by:
+### Responsive Frontend with Interactive Visualizations
 
-- Embedding generation using sentence-transformers models
-- Maximal Marginal Relevance calculations with CuPy
-- Optimized batch processing for GPU efficiency
-- Hybrid embedding mode (GPU + HANA internal)
+The frontend provides:
 
-### Running the API
+- Mobile-first responsive design
+- Accessibility features (dark mode, high contrast, screen reader support)
+- Interactive 3D vector visualizations
+- Advanced search interface
+- Comprehensive error handling with suggestions
+- Authentication and user management
 
-```bash
-# Navigate to the API directory
-cd api
+### Deployment Options
 
-# Copy and configure environment variables
-cp .env.example .env
+#### Docker Deployment
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the API
-uvicorn app:app --reload
-```
-
-For production deployment, use the provided Docker configuration:
+Deploy using Docker Compose with separate files for backend and frontend:
 
 ```bash
-# Build and run with Docker Compose (CPU mode)
-docker-compose up -d
+# Deploy backend API only
+docker-compose -f docker-compose.api.yml up -d
 
-# Build and run with GPU acceleration
-docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+# Deploy frontend only
+docker-compose -f docker-compose.frontend.yml up -d
+
+# Deploy both with GPU acceleration
+docker-compose -f docker-compose.api.yml -f docker-compose.gpu.yml -f docker-compose.frontend.yml up -d
 ```
 
-For more details, see the [API README](api/README.md).
+#### Vercel Deployment
+
+The frontend is optimized for deployment on Vercel:
+
+1. Push code to GitHub
+2. Create a new project on Vercel
+3. Configure build settings and environment variables
+4. Deploy
+
+For complete deployment instructions, see the [Deployment Guide](docs/deployment_guide.md).
 
 ## Performance Considerations
 
 When using GPU acceleration:
 
-1. **Batch Size**: Adjust the `GPU_BATCH_SIZE` parameter in the API config to optimize for your GPU memory and performance needs
-2. **Embedding Models**: Choose the appropriate embedding model based on your quality vs. performance tradeoff
-3. **Hybrid Mode**: The API supports using both GPU acceleration and HANA's internal embedding capabilities
+1. **Batch Size**: Adjust the `BATCH_SIZE` parameter to optimize for your GPU memory and performance needs
+2. **TensorRT Precision**: Select the appropriate precision (FP16, FP32, INT8) based on your accuracy vs. performance tradeoff
+3. **GPU Model Selection**: Performance varies significantly across different NVIDIA GPU models:
+   - NVIDIA T4: Good for cost-effective inference (4-12x CPU performance)
+   - NVIDIA A10: Excellent balanced performance (6-21x CPU performance)
+   - NVIDIA A100: Highest throughput for large workloads (9-37x CPU performance)
+4. **Hybrid Mode**: Supports both GPU acceleration and HANA's internal embedding capabilities
 
-## Development and CI/CD
+For detailed performance benchmarks and optimization guides, see our [NVIDIA Blueprint Compliance](docs/nvidia_blueprint_compliance.md) documentation.
 
-This project includes a complete CI/CD pipeline for automated testing, building, and deployment:
+## Development, CI/CD, and Infrastructure as Code
+
+This project includes a complete CI/CD pipeline for automated testing, building, and deployment, plus Infrastructure as Code for reliable deployment to Kubernetes:
+
+### CI/CD Pipeline
 
 - GitHub Actions workflows for CI/CD pipelines
 - Pre-commit hooks for code quality
 - Automated testing across multiple Python versions
 - Container building and publishing
 - Automated deployment to cloud environments
+
+### Infrastructure as Code with Terraform
+
+The project uses Terraform to manage all infrastructure components:
+
+- **Kubernetes Infrastructure**: Namespaces, deployments, services, secrets, HPA
+- **NVIDIA GPU Support**: GPU-optimized deployments with resource management
+- **Monitoring Stack**: Prometheus for metrics and Grafana for visualization
+- **Environment Configurations**: Separate staging and production setups
+- **Automated Management**: Infrastructure changes managed through CI/CD pipeline
+
+### Local Development Setup
 
 For developers, we recommend setting up the local development environment:
 
@@ -191,7 +242,21 @@ This setup script will:
 3. Set up automatic synchronization between both repositories
 4. Install the tag-and-release script for easy version management
 
-For detailed information about the CI/CD setup, see our [CI/CD Guide](docs/cicd_guide.md).
+### Infrastructure Management
+
+For infrastructure management:
+
+```bash
+# Plan infrastructure changes for staging environment
+./scripts/terraform_apply.sh
+
+# Apply infrastructure changes to production
+./scripts/terraform_apply.sh -e production -a apply
+```
+
+For detailed information about the setup, see our:
+- [CI/CD Guide](docs/cicd_guide.md)
+- [Infrastructure as Code Guide](docs/infrastructure_as_code.md)
 
 ## Support, Feedback, Contributing
 
