@@ -5,37 +5,229 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SAP HANA Cloud LangChain T4 GPU Demo</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vector-visualization.css" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #0070f3;
+            --primary-dark: #0052cc;
+            --secondary-color: #f8f9fa;
+            --text-color: #333;
+            --danger-color: #dc3545;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+        }
+        
+        /* Enable dark mode if preferred by the user */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary-color: #4287f5;
+                --primary-dark: #3273dc;
+                --secondary-color: #2a2a2a;
+                --text-color: #f0f0f0;
+            }
+            
+            body {
+                background-color: #121212;
+                color: var(--text-color);
+            }
+            
+            .card {
+                background-color: #1e1e1e;
+                border-color: #444;
+            }
+            
+            .card-header {
+                background-color: #2a2a2a;
+                border-color: #444;
+            }
+            
+            .form-control, .form-select {
+                background-color: #2a2a2a;
+                border-color: #444;
+                color: var(--text-color);
+            }
+            
+            .json-result {
+                background-color: #2a2a2a;
+                color: #e0e0e0;
+            }
+            
+            .nav-tabs .nav-link.active {
+                background-color: #1e1e1e;
+                color: var(--text-color);
+                border-color: #444;
+            }
+            
+            .nav-tabs .nav-link {
+                color: #aaa;
+            }
+        }
+        
+        /* Base styles */
         body {
             padding-top: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            transition: background-color 0.3s ease;
         }
+        
+        /* Responsive typography */
+        h1 {
+            font-size: calc(1.5rem + 1vw);
+        }
+        
+        h5 {
+            font-size: calc(1rem + 0.3vw);
+        }
+        
+        /* Improve card styles */
+        .card {
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            transition: box-shadow 0.3s ease;
+        }
+        
+        .card:hover {
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Result display */
         .json-result {
-            font-family: monospace;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
             white-space: pre-wrap;
             max-height: 400px;
             overflow-y: auto;
-            background-color: #f8f9fa;
+            background-color: var(--secondary-color);
             padding: 15px;
             border-radius: 5px;
+            font-size: 0.9rem;
+            line-height: 1.5;
         }
-        .card {
-            margin-bottom: 20px;
-        }
+        
+        /* Loading indicator */
         .loading {
             display: none;
             text-align: center;
             margin: 20px 0;
         }
+        
         .loading-spinner {
             width: 3rem;
             height: 3rem;
+        }
+        
+        /* Form controls */
+        .form-control:focus, .form-select:focus {
+            box-shadow: 0 0 0 0.25rem rgba(0, 123, 255, 0.25);
+            border-color: var(--primary-color);
+        }
+        
+        /* Buttons */
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+            border-color: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+        
+        /* Error messages */
+        .alert-danger {
+            border-left: 4px solid var(--danger-color);
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 576px) {
+            .container {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            
+            .card-body {
+                padding: 15px 10px;
+            }
+            
+            .json-result {
+                padding: 10px;
+                font-size: 0.8rem;
+            }
+            
+            .nav-tabs .nav-link {
+                padding: 0.5rem 0.75rem;
+                font-size: 0.9rem;
+            }
+        }
+        
+        /* Accessibility improvements */
+        .visually-hidden:not(:focus):not(:active) {
+            clip: rect(0 0 0 0); 
+            clip-path: inset(50%);
+            height: 1px;
+            overflow: hidden;
+            position: absolute;
+            white-space: nowrap; 
+            width: 1px;
+        }
+        
+        /* High contrast mode */
+        .high-contrast {
+            --primary-color: #0000ff;
+            --primary-dark: #0000cc;
+            --danger-color: #ff0000;
+            --success-color: #008000;
+            --warning-color: #ff8000;
+            --info-color: #0080ff;
+            filter: contrast(1.5);
+        }
+        
+        /* Focus indicators for accessibility */
+        a:focus, button:focus, input:focus, select:focus, textarea:focus {
+            outline: 3px solid var(--primary-color);
+            outline-offset: 2px;
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Accessibility Controls -->
+        <div class="row mb-3">
+            <div class="col-12 d-flex justify-content-end">
+                <div class="btn-group" role="group" aria-label="Accessibility options">
+                    <button id="toggle-dark-mode" class="btn btn-sm btn-outline-secondary" title="Toggle dark mode">
+                        <span class="visually-hidden">Toggle dark mode</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-moon" viewBox="0 0 16 16">
+                            <path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/>
+                        </svg>
+                    </button>
+                    <button id="toggle-high-contrast" class="btn btn-sm btn-outline-secondary" title="Toggle high contrast">
+                        <span class="visually-hidden">Toggle high contrast</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-circle-half" viewBox="0 0 16 16">
+                            <path d="M8 15A7 7 0 1 0 8 1v14zm0 1A8 8 0 1 1 8 0a8 8 0 0 1 0 16z"/>
+                        </svg>
+                    </button>
+                    <button id="increase-font" class="btn btn-sm btn-outline-secondary" title="Increase font size">
+                        <span class="visually-hidden">Increase font size</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/>
+                        </svg>
+                    </button>
+                    <button id="decrease-font" class="btn btn-sm btn-outline-secondary" title="Decrease font size">
+                        <span class="visually-hidden">Decrease font size</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-dash-lg" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd" d="M2 8a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11A.5.5 0 0 1 2 8Z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
         <div class="row justify-content-center">
-            <div class="col-md-10">
+            <div class="col-lg-10 col-md-12">
                 <h1 class="text-center mb-4">SAP HANA Cloud LangChain T4 GPU Demo</h1>
                 
                 <!-- Login Form (hidden by default) -->
@@ -207,7 +399,22 @@ The vector store in SAP HANA Cloud supports filtering by metadata.</textarea>
                         </div>
                     </div>
                     <div class="card-body">
-                        <div class="json-result" id="result"></div>
+                        <ul class="nav nav-tabs mb-3" id="result-tabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="json-tab" data-bs-toggle="tab" data-bs-target="#json-view" type="button" role="tab" aria-controls="json-view" aria-selected="true">JSON</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="visualization-tab" data-bs-toggle="tab" data-bs-target="#visualization-view" type="button" role="tab" aria-controls="visualization-view" aria-selected="false">Visualization</button>
+                            </li>
+                        </ul>
+                        <div class="tab-content" id="result-tab-content">
+                            <div class="tab-pane fade show active" id="json-view" role="tabpanel" aria-labelledby="json-tab">
+                                <div class="json-result" id="result"></div>
+                            </div>
+                            <div class="tab-pane fade" id="visualization-view" role="tabpanel" aria-labelledby="visualization-tab">
+                                <div id="vector-visualization" class="mt-3"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
@@ -223,9 +430,47 @@ The vector store in SAP HANA Cloud supports filtering by metadata.</textarea>
                 </div>
             </div>
         </div>
+        
+        <!-- Footer with accessibility info -->
+        <footer class="row mt-4 mb-4">
+            <div class="col-12 text-center">
+                <p class="small text-muted">
+                    SAP HANA Cloud LangChain Integration | <button id="show-accessibility" class="btn btn-sm btn-link p-0 align-baseline">Accessibility</button>
+                </p>
+            </div>
+        </footer>
+        
+        <!-- Accessibility modal -->
+        <div class="modal fade" id="accessibility-modal" tabindex="-1" aria-labelledby="accessibility-modal-label" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="accessibility-modal-label">Accessibility Features</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>This application includes several accessibility features:</p>
+                        <ul>
+                            <li><strong>Dark mode:</strong> Reduces eye strain in low-light environments</li>
+                            <li><strong>High contrast mode:</strong> Improves readability for users with visual impairments</li>
+                            <li><strong>Font size controls:</strong> Adjust text size for better readability</li>
+                            <li><strong>Keyboard navigation:</strong> All features accessible via keyboard</li>
+                            <li><strong>Screen reader support:</strong> Compatible with screen readers</li>
+                        </ul>
+                        <p>To access these features, use the buttons in the top-right corner of the page.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    <script src="/vector-visualization.js"></script>
     <script>
         // Initialize authentication UI
         function initAuth() {
@@ -438,6 +683,19 @@ The vector store in SAP HANA Cloud supports filtering by metadata.</textarea>
                 
                 // Display results
                 displayResult(data, data.processing_time_ms, data.gpu_used);
+                
+                // Initialize vector visualization if embeddings are available
+                if (data.embeddings && data.embeddings.length > 0) {
+                    createVectorVisualization({
+                        query_vector: data.embeddings[0],
+                        results: data.embeddings.slice(1).map((vector, index) => ({
+                            vector: vector,
+                            metadata: { title: texts[index + 1] },
+                            text: texts[index + 1],
+                            score: cosineSimilarity(data.embeddings[0], vector)
+                        }))
+                    });
+                }
             } catch (error) {
                 // Error already handled in makeApiRequest
             }
@@ -468,11 +726,17 @@ The vector store in SAP HANA Cloud supports filtering by metadata.</textarea>
                     query,
                     k,
                     table_name: tableName,
-                    filter
+                    filter,
+                    include_vectors: true  // Request vectors for visualization
                 });
                 
                 // Display results
                 displayResult(data, data.processing_time_ms, true);
+                
+                // Initialize vector visualization if search results are available
+                if (data.results && data.results.length > 0) {
+                    createVectorVisualization(data);
+                }
             } catch (error) {
                 // Error already handled in makeApiRequest
             }
@@ -505,11 +769,17 @@ The vector store in SAP HANA Cloud supports filtering by metadata.</textarea>
                     k,
                     lambda_mult: lambdaMult,
                     table_name: tableName,
-                    filter
+                    filter,
+                    include_vectors: true  // Request vectors for visualization
                 });
                 
                 // Display results
                 displayResult(data, data.processing_time_ms, true);
+                
+                // Initialize vector visualization if search results are available
+                if (data.results && data.results.length > 0) {
+                    createVectorVisualization(data);
+                }
             } catch (error) {
                 // Error already handled in makeApiRequest
             }
@@ -561,9 +831,259 @@ The vector store in SAP HANA Cloud supports filtering by metadata.</textarea>
         });
         
         // Initialize the page
+        // Accessibility features
+        function initAccessibility() {
+            // Dark mode toggle
+            document.getElementById('toggle-dark-mode').addEventListener('click', function() {
+                document.body.classList.toggle('dark-mode');
+                // Store preference
+                const isDarkMode = document.body.classList.contains('dark-mode');
+                localStorage.setItem('dark-mode', isDarkMode);
+            });
+            
+            // High contrast toggle
+            document.getElementById('toggle-high-contrast').addEventListener('click', function() {
+                document.body.classList.toggle('high-contrast');
+                // Store preference
+                const isHighContrast = document.body.classList.contains('high-contrast');
+                localStorage.setItem('high-contrast', isHighContrast);
+            });
+            
+            // Font size controls
+            document.getElementById('increase-font').addEventListener('click', function() {
+                changeFontSize(1);
+            });
+            
+            document.getElementById('decrease-font').addEventListener('click', function() {
+                changeFontSize(-1);
+            });
+            
+            // Show accessibility modal
+            document.getElementById('show-accessibility').addEventListener('click', function() {
+                const accessibilityModal = new bootstrap.Modal(document.getElementById('accessibility-modal'));
+                accessibilityModal.show();
+            });
+            
+            // Apply saved preferences
+            if (localStorage.getItem('dark-mode') === 'true') {
+                document.body.classList.add('dark-mode');
+            }
+            
+            if (localStorage.getItem('high-contrast') === 'true') {
+                document.body.classList.add('high-contrast');
+            }
+            
+            const fontSize = localStorage.getItem('font-size');
+            if (fontSize) {
+                document.documentElement.style.fontSize = fontSize + 'px';
+            }
+        }
+        
+        // Change font size and save preference
+        function changeFontSize(step) {
+            const root = document.documentElement;
+            const currentSize = parseFloat(getComputedStyle(root).fontSize);
+            const newSize = currentSize + step;
+            
+            // Limit size range
+            if (newSize >= 12 && newSize <= 24) {
+                root.style.fontSize = newSize + 'px';
+                localStorage.setItem('font-size', newSize);
+            }
+        }
+        
+        // Add keyboard navigation
+        function setupKeyboardNavigation() {
+            // Tab index for all interactive elements
+            const tabElements = document.querySelectorAll('button, input, select, textarea, a');
+            tabElements.forEach(el => {
+                if (!el.getAttribute('tabindex')) {
+                    el.setAttribute('tabindex', '0');
+                }
+            });
+            
+            // Keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Alt+D - Toggle dark mode
+                if (e.altKey && e.key === 'd') {
+                    e.preventDefault();
+                    document.getElementById('toggle-dark-mode').click();
+                }
+                
+                // Alt+C - Toggle high contrast
+                if (e.altKey && e.key === 'c') {
+                    e.preventDefault();
+                    document.getElementById('toggle-high-contrast').click();
+                }
+                
+                // Alt+Plus - Increase font size
+                if (e.altKey && e.key === '+') {
+                    e.preventDefault();
+                    document.getElementById('increase-font').click();
+                }
+                
+                // Alt+Minus - Decrease font size
+                if (e.altKey && e.key === '-') {
+                    e.preventDefault();
+                    document.getElementById('decrease-font').click();
+                }
+            });
+        }
+        
+        // Check if device is mobile
+        function isMobileDevice() {
+            return (window.innerWidth <= 768);
+        }
+        
+        // Optimize UI for mobile devices
+        function optimizeForMobile() {
+            if (isMobileDevice()) {
+                // Adjust UI for small screens
+                document.querySelectorAll('.json-result').forEach(el => {
+                    el.style.maxHeight = '300px';
+                });
+                
+                // Collapse form sections by default on mobile
+                const formSections = document.querySelectorAll('.card-body');
+                formSections.forEach(section => {
+                    const toggleBtn = document.createElement('button');
+                    toggleBtn.className = 'btn btn-sm btn-outline-secondary d-md-none mb-2';
+                    toggleBtn.textContent = 'Toggle Form';
+                    toggleBtn.addEventListener('click', function() {
+                        const form = section.querySelector('form');
+                        if (form) {
+                            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+                        }
+                    });
+                    
+                    // Insert toggle button at the beginning of the section
+                    if (section.querySelector('form')) {
+                        section.insertBefore(toggleBtn, section.firstChild);
+                    }
+                });
+            }
+        }
+        
+        // Calculate cosine similarity between two vectors
+        function cosineSimilarity(vec1, vec2) {
+            if (!vec1 || !vec2 || vec1.length !== vec2.length) return 0;
+            
+            let dotProduct = 0;
+            let vec1Magnitude = 0;
+            let vec2Magnitude = 0;
+            
+            for (let i = 0; i < vec1.length; i++) {
+                dotProduct += vec1[i] * vec2[i];
+                vec1Magnitude += vec1[i] * vec1[i];
+                vec2Magnitude += vec2[i] * vec2[i];
+            }
+            
+            vec1Magnitude = Math.sqrt(vec1Magnitude);
+            vec2Magnitude = Math.sqrt(vec2Magnitude);
+            
+            if (vec1Magnitude === 0 || vec2Magnitude === 0) return 0;
+            
+            return dotProduct / (vec1Magnitude * vec2Magnitude);
+        }
+        
+        // Initialize vector visualization
+        function createVectorVisualization(data) {
+            // Clear previous visualization
+            const container = document.getElementById('vector-visualization');
+            container.innerHTML = '';
+            
+            // Check if we have necessary data
+            if (!data.query_vector || !data.results || !data.results.length) {
+                container.innerHTML = '<div class="alert alert-info">No vector data available for visualization.</div>';
+                return;
+            }
+            
+            // Process data for visualization
+            const visData = prepareVisualizationData(data);
+            
+            // Initialize visualization
+            const isDarkMode = document.body.classList.contains('dark-mode');
+            const isHighContrast = document.body.classList.contains('high-contrast');
+            
+            const visOptions = {
+                height: '50vh',
+                colorScheme: 'default',
+                highContrast: isHighContrast,
+                showLabels: true,
+                colorblindMode: false,
+                backgroundColor: '#f8f9fa',
+                darkModeBackgroundColor: '#2a2a2a'
+            };
+            
+            // Create visualization
+            const visualization = new VectorVisualization('vector-visualization', visOptions);
+            visualization.loadData(visData);
+            
+            // Make visualization accessible tab visible
+            document.getElementById('visualization-tab').click();
+        }
+        
+        // Process data for visualization
+        function prepareVisualizationData(data) {
+            // Extract query vector
+            const queryVector = data.query_vector;
+            
+            // Get document vectors, metadata and content
+            const docVectors = [];
+            const metadata = [];
+            const contents = [];
+            const similarities = [];
+            
+            for (const result of data.results) {
+                if (result.vector) {
+                    docVectors.push(result.vector);
+                    
+                    // Get metadata
+                    metadata.push({
+                        title: result.metadata?.title || result.metadata?.name || `Result ${docVectors.length}`,
+                        source: result.metadata?.source || '',
+                        id: result.id || ''
+                    });
+                    
+                    // Get content
+                    contents.push(result.text || result.content || result.page_content || JSON.stringify(result.metadata || {}));
+                    
+                    // Get similarity
+                    similarities.push(result.score || result.similarity || 0);
+                }
+            }
+            
+            // Apply dimensionality reduction if needed
+            // For simplicity, we'll just use the first 3 dimensions for visualization
+            const reducedVectors = docVectors.map(v => [v[0] || 0, v[1] || 0, v[2] || 0]);
+            const reducedQuery = [queryVector[0] || 0, queryVector[1] || 0, queryVector[2] || 0];
+            
+            return {
+                points: reducedVectors,
+                query_point: reducedQuery,
+                metadata: metadata,
+                contents: contents,
+                similarities: similarities
+            };
+        }
+        
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize authentication UI
             initAuth();
+            
+            // Initialize accessibility features
+            initAccessibility();
+            
+            // Setup keyboard navigation
+            setupKeyboardNavigation();
+            
+            // Optimize for mobile devices
+            optimizeForMobile();
+            
+            // Listen for window resize to adjust mobile optimizations
+            window.addEventListener('resize', function() {
+                optimizeForMobile();
+            });
         });
     </script>
 </body>
