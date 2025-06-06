@@ -16,8 +16,8 @@ LABEL nvidia.ngc.gpu.memory="16G+"
 WORKDIR /app
 
 # Copy application files
-COPY test_app_enhanced.py /app/
-COPY app.py /app/
+COPY api /app/api
+COPY langchain_hana /app/langchain_hana
 COPY requirements.txt /app/
 
 # Install dependencies
@@ -58,4 +58,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the application
-CMD ["python", "-m", "uvicorn", "test_app_enhanced:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "api.core.main:app", "--host", "0.0.0.0", "--port", "8000"]
