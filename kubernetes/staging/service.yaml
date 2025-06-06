@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: langchain-hana-api
+  namespace: langchain-hana-staging
+  labels:
+    app: langchain-hana-api
+    environment: staging
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: langchain-hana-api

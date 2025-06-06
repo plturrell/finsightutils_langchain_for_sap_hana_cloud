@@ -184,3 +184,7 @@ docs/docs/templates
 prof
 virtualenv/
 .vercel
+# Terraform credentials
+*.tfvars
+!*.tfvars.example
+.archive/

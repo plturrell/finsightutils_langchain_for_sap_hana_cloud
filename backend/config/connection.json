@@ -1,0 +1,16 @@
+{
+  "frontend": {
+    "url": "https://sap-hana-langchain-frontend.vercel.app",
+    "cors_allowed": true
+  },
+  "backend": {
+    "url": "http://localhost:8000",
+    "auth_required": false
+  },
+  "connection": {
+    "api_version": "v1",
+    "timeout": 30,
+    "retry_count": 3,
+    "retry_delay": 1000
+  }
+}

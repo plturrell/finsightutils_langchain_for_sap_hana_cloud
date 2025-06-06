@@ -1,0 +1,171 @@
+# Unified Configuration for LangChain Integration with SAP HANA Cloud
+# This file consolidates configuration settings from multiple sources
+
+# Basic Environment Settings
+environment:
+  name: production  # production, development, staging
+  log_level: INFO   # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  debug_mode: false
+  timeout_seconds: 60
+  health_check_interval: 30
+
+# NVIDIA GPU Settings
+gpu:
+  enabled: true
+  device: "cuda"
+  multi_gpu: false
+  memory_fraction: 0.9
+  default_precision: "fp16"  # fp16, int8, fp32
+  tensorrt:
+    enabled: true
+    precision: "fp16"  # fp16, int8, fp32
+    cache_dir: "/tmp/tensorrt_engines"
+    max_workspace_mb: 4096
+    dynamic_shapes: true
+    force_rebuild: false
+  tensor_cores:
+    enabled: true
+    optimization_level: "performance"  # performance, balanced, accuracy
+    calibration:
+      enabled: true
+      domain: "all"  # general, financial, sap, technical, all
+      custom_file: ""
+      sample_count: 100
+  batching:
+    dynamic: true
+    default_size: 32
+    max_size: 128
+    min_size: 1
+    optimal_sizes: [1, 8, 32, 64, 128]
+
+# LangChain Settings
+langchain:
+  embeddings:
+    default_model: "all-MiniLM-L6-v2"
+    cache_embeddings: true
+    normalize: true
+    default_batch_size: 32
+    dimension: 384
+  vectorstore:
+    distance_strategy: "cosine"  # cosine, euclidean, dot_product
+    top_k: 5
+    score_threshold: 0.75
+    table_name: "LANGCHAIN_EMBEDDINGS"
+    schema_name: "LANGCHAIN"
+    index_name: "IDX_LANGCHAIN_VECTOR"
+
+# SAP HANA Cloud Connection
+hana:
+  connection_string: "${HANA_CONNECTION_STRING}"
+  user: "${HANA_USER}"
+  password: "${HANA_PASSWORD}"
+  schema: "LANGCHAIN"
+  connection_pool:
+    max_size: 10
+    min_size: 1
+    timeout_seconds: 30
+    connection_timeout: 15
+  options:
+    encrypt: true
+    validate_certificate: true
+    reconnect: true
+
+# API Settings
+api:
+  host: "0.0.0.0"
+  port: 8000
+  enable_docs: true
+  enable_redoc: true
+  cors:
+    enabled: true
+    allow_origins: ["*"]
+    allow_methods: ["*"]
+    allow_headers: ["*"]
+  rate_limiting:
+    enabled: true
+    max_requests: 100
+    window_seconds: 60
+  authentication:
+    enabled: false
+    jwt_secret: "${JWT_SECRET}"
+    token_expiry_minutes: 60
+    require_auth: false
+
+# Deployment Settings
+deployment:
+  backend:
+    type: "nvidia_t4"  # nvidia_t4, docker, kubernetes, btp
+    replicas: 1
+    auto_scaling: true
+    min_replicas: 1
+    max_replicas: 3
+    resource_limits:
+      cpu: "4"
+      memory: "16Gi"
+      gpu: "1"
+  frontend:
+    type: "vercel"  # vercel, static, docker
+    project_name: "sap-hana-langchain-t4"
+    environment: "production"
+    domain: ""
+    analytics_enabled: false
+
+# Monitoring Settings
+monitoring:
+  prometheus:
+    enabled: true
+    port: 8001
+    path: "/metrics"
+  logging:
+    format: "json"
+    output: "console"  # console, file
+    file_path: "/logs/app.log"
+    rotation: true
+    max_size_mb: 100
+    backup_count: 5
+  tracing:
+    enabled: false
+    exporter: "jaeger"
+    service_name: "langchain-hana"
+    endpoint: ""
+
+# Performance Optimization
+performance:
+  cache:
+    embeddings:
+      enabled: true
+      ttl_seconds: 3600
+      max_size_mb: 1024
+    queries:
+      enabled: true
+      ttl_seconds: 300
+      max_size_mb: 256
+  memory_optimization:
+    gc_interval_seconds: 300
+    clear_cuda_cache: true
+    max_memory_usage_percent: 90
+  connection_pooling:
+    enabled: true
+    max_connections: 20
+    idle_timeout_seconds: 600
+
+# Error Handling
+error_handling:
+  detailed_errors: true
+  retry:
+    enabled: true
+    max_attempts: 3
+    backoff_factor: 1.5
+    max_backoff_seconds: 60
+  fallback:
+    enabled: true
+    fallback_to_cpu: true
+
+# Feature Flags
+features:
+  advanced_vector_search: true
+  knowledge_graph: false
+  multi_tenant: false
+  streaming_responses: true
+  batch_processing: true
+  visualization: true

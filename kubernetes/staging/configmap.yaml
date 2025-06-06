@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langchain-hana-config
+  namespace: langchain-hana-staging
+data:
+  GPU_ENABLED: "true"
+  USE_TENSORRT: "true"
+  LOG_LEVEL: "INFO"
+  BATCH_SIZE: "32"
+  ENVIRONMENT: "staging"
+  CORS_ORIGINS: "https://langchain-hana-frontend-staging.vercel.app"

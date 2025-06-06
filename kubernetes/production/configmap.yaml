@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langchain-hana-config
+  namespace: langchain-hana-production
+data:
+  GPU_ENABLED: "true"
+  USE_TENSORRT: "true"
+  LOG_LEVEL: "WARNING"
+  BATCH_SIZE: "64"
+  ENVIRONMENT: "production"
+  CORS_ORIGINS: "https://langchain-hana-frontend.vercel.app"
+  ENABLE_CACHING: "true"
+  REQUEST_TIMEOUT: "60"

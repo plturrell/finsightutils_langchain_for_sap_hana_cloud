@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: langchain-hana-api
+  namespace: langchain-hana-production
+  labels:
+    app: langchain-hana-api
+    environment: production
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: langchain-hana-api

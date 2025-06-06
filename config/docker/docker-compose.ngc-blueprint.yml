@@ -1,0 +1,103 @@
+version: '3.8'
+
+name: sap-hana-langchain-ngc-blueprint
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.nvidia
+      args:
+        BASE_IMAGE: nvcr.io/nvidia/pytorch:23.12-py3
+    image: nvcr.io/nvidia/sap-enhanced/langchain-hana-gpu:latest
+    container_name: sap-hana-langchain-api-ngc
+    ports:
+      - "8000:8000"
+    environment:
+      # SAP HANA Cloud Connection
+      - HANA_HOST=${HANA_HOST}
+      - HANA_PORT=${HANA_PORT:-443}
+      - HANA_USER=${HANA_USER}
+      - HANA_PASSWORD=${HANA_PASSWORD}
+      - DEFAULT_TABLE_NAME=${DEFAULT_TABLE_NAME:-EMBEDDINGS}
+      
+      # NGC Blueprint-specific settings
+      - NGC_BLUEPRINT=true
+      - NGC_API_KEY=${NGC_API_KEY}
+      - NGC_ORG=${NGC_ORG}
+      
+      # GPU Acceleration (optimized for NGC)
+      - GPU_ENABLED=true
+      - USE_TENSORRT=true
+      - TENSORRT_PRECISION=${TENSORRT_PRECISION:-fp16}
+      - TENSORRT_ENGINE_CACHE_DIR=/app/trt_engines
+      - BATCH_SIZE=${BATCH_SIZE:-64}
+      - MAX_BATCH_SIZE=${MAX_BATCH_SIZE:-256}
+      - ENABLE_MULTI_GPU=true
+      - GPU_MEMORY_FRACTION=0.95
+      - CUDA_CACHE_PATH=/app/cuda_cache
+      
+      # API and Error Settings
+      - ENABLE_CORS=true
+      - JWT_SECRET=${JWT_SECRET:-sap-hana-langchain-integration-secret-key}
+      - ENABLE_CONTEXT_AWARE_ERRORS=true
+      - LOG_LEVEL=INFO
+      - ERROR_VERBOSITY=detailed
+      - ENABLE_ERROR_TELEMETRY=true
+      
+      # Performance Optimizations
+      - ENABLE_DYNAMIC_BATCHING=true
+      - ENABLE_TENSOR_FUSION=true
+      - ENABLE_KERNEL_FUSION=true
+      - ENABLE_QUANTIZATION=${ENABLE_QUANTIZATION:-true}
+      - OPTIMIZATION_LEVEL=${OPTIMIZATION_LEVEL:-3}
+    volumes:
+      - nvidia-trt-engines:/app/trt_engines
+      - nvidia-data:/app/data
+      - nvidia-logs:/app/logs
+      - nvidia-cuda-cache:/app/cuda_cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${GPU_COUNT:-1}
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    command: ["python", "-m", "uvicorn", "test_app_enhanced:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+
+  # NGC blueprints don't typically include frontend services, as they focus on compute workloads
+  # Uncomment this section if you want to include the frontend in the NGC deployment
+  #
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   image: nvcr.io/nvidia/sap-enhanced/langchain-hana-frontend:latest
+  #   container_name: sap-hana-langchain-frontend-ngc
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NODE_ENV=production
+  #     - BACKEND_URL=http://api:8000
+  #     - VITE_APP_VERSION=1.0.0
+  #     - VITE_ENABLE_VECTOR_VISUALIZATION=true
+  #   depends_on:
+  #     - api
+  #   restart: unless-stopped
+
+volumes:
+  nvidia-trt-engines:
+    driver: local
+  nvidia-data:
+    driver: local
+  nvidia-logs:
+    driver: local
+  nvidia-cuda-cache:
+    driver: local

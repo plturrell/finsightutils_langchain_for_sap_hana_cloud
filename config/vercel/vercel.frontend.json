@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "name": "sap-hana-langchain-frontend",
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "buildCommand": "cd frontend && npm install && npm run build",
+        "outputDirectory": "frontend/build"
+      }
+    },
+    {
+      "src": "frontend/public/**/*",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "dest": "/frontend/build/static/$1"
+    },
+    {
+      "src": "/favicon.ico",
+      "dest": "/frontend/build/favicon.ico"
+    },
+    {
+      "src": "/manifest.json",
+      "dest": "/frontend/build/manifest.json"
+    },
+    {
+      "src": "/robots.txt",
+      "dest": "/frontend/build/robots.txt"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/build/index.html"
+    }
+  ],
+  "env": {
+    "REACT_APP_API_URL": "https://your-backend-url.example.com",
+    "REACT_APP_API_VERSION": "1.0.0",
+    "REACT_APP_ENVIRONMENT": "production"
+  }
+}

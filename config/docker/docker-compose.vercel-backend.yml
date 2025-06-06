@@ -1,0 +1,78 @@
+version: '3.8'
+
+name: sap-hana-langchain-vercel-backend
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.nvidia
+      args:
+        BASE_IMAGE: nvcr.io/nvidia/pytorch:23.12-py3
+    image: langchain-hana-vercel-backend:latest
+    container_name: sap-hana-langchain-vercel-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # SAP HANA Cloud Connection
+      - HANA_HOST=${HANA_HOST}
+      - HANA_PORT=${HANA_PORT:-443}
+      - HANA_USER=${HANA_USER}
+      - HANA_PASSWORD=${HANA_PASSWORD}
+      - DEFAULT_TABLE_NAME=${DEFAULT_TABLE_NAME:-EMBEDDINGS}
+      
+      # Vercel Integration Settings
+      - VERCEL_INTEGRATION=true
+      - VERCEL_URL=${VERCEL_URL}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - ALLOW_VERCEL_WEBHOOK=true
+      
+      # GPU Acceleration
+      - GPU_ENABLED=true
+      - USE_TENSORRT=true
+      - TENSORRT_PRECISION=${TENSORRT_PRECISION:-fp16}
+      - TENSORRT_ENGINE_CACHE_DIR=/app/trt_engines
+      - BATCH_SIZE=${BATCH_SIZE:-32}
+      - MAX_BATCH_SIZE=${MAX_BATCH_SIZE:-128}
+      - ENABLE_MULTI_GPU=true
+      
+      # API Configuration
+      - PORT=8000
+      - LOG_LEVEL=INFO
+      - ENABLE_CORS=true
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - JWT_SECRET=${JWT_SECRET:-sap-hana-langchain-t4-integration-secret-key-2025}
+      - DEFAULT_TIMEOUT=60
+      - ENABLE_CONTEXT_AWARE_ERRORS=true
+      
+      # Authentication for Vercel Frontend
+      - REQUIRE_AUTH=${REQUIRE_AUTH:-false}
+      - AUTH_USERNAME=${AUTH_USERNAME:-admin}
+      - AUTH_PASSWORD=${AUTH_PASSWORD:-sap-hana-t4-admin}
+    volumes:
+      - vercel-trt-engines:/app/trt_engines
+      - vercel-api-data:/app/data
+      - vercel-api-logs:/app/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    command: ["python", "-m", "uvicorn", "api.vercel_integration:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+
+volumes:
+  vercel-trt-engines:
+    driver: local
+  vercel-api-data:
+    driver: local
+  vercel-api-logs:
+    driver: local

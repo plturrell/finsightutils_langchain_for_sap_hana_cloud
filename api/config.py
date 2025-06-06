@@ -245,6 +245,49 @@ class GPUConfig(BaseModel):
         return v
 
 
+class CORSConfig(BaseModel):
+    """
+    CORS configuration for controlling cross-origin requests.
+    
+    These settings control CORS behavior:
+    - ENABLE_CORS: Enable CORS support (default: true)
+    - CORS_ORIGINS: Comma-separated list of allowed origins (default: *)
+    - CORS_METHODS: Comma-separated list of allowed HTTP methods (default: *)
+    - CORS_HEADERS: Comma-separated list of allowed HTTP headers (default: *)
+    - CORS_CREDENTIALS: Allow credentials in CORS requests (default: false)
+    """
+    enable_cors: bool = Field(default=True)
+    allowed_origins: List[str] = Field(default=["*"])
+    allowed_methods: List[str] = Field(default=["*"])
+    allowed_headers: List[str] = Field(default=["*"])
+    allow_credentials: bool = Field(default=False)
+    
+    class Config:
+        env_prefix = ""
+        
+    def __init__(self, **data):
+        """Initialize with values from environment variables if not provided."""
+        if "enable_cors" not in data:
+            data["enable_cors"] = os.getenv("ENABLE_CORS", "true").lower() == "true"
+        
+        if "allowed_origins" not in data:
+            origins_str = os.getenv("CORS_ORIGINS", "*")
+            data["allowed_origins"] = [origin.strip() for origin in origins_str.split(",")] if origins_str != "*" else ["*"]
+        
+        if "allowed_methods" not in data:
+            methods_str = os.getenv("CORS_METHODS", "*")
+            data["allowed_methods"] = [method.strip() for method in methods_str.split(",")] if methods_str != "*" else ["*"]
+        
+        if "allowed_headers" not in data:
+            headers_str = os.getenv("CORS_HEADERS", "*")
+            data["allowed_headers"] = [header.strip() for header in headers_str.split(",")] if headers_str != "*" else ["*"]
+        
+        if "allow_credentials" not in data:
+            data["allow_credentials"] = os.getenv("CORS_CREDENTIALS", "false").lower() == "true"
+        
+        super().__init__(**data)
+
+
 class FeatureConfig(BaseModel):
     """
     Feature configuration for enabling/disabling functionality.
@@ -254,13 +297,11 @@ class FeatureConfig(BaseModel):
     - CACHE_VECTOR_REDUCTION: Enable caching for vector reduction operations (default: true)
     - ENABLE_ADVANCED_CLUSTERING: Enable advanced clustering for search results (default: false)
     - ENABLE_KNOWLEDGE_GRAPH: Enable knowledge graph integration (default: true)
-    - ENABLE_CORS: Enable CORS support for frontend integration (default: true)
     """
     enable_error_context: bool = Field(default=True)
     cache_vector_reduction: bool = Field(default=True)
     enable_advanced_clustering: bool = Field(default=False)
     enable_knowledge_graph: bool = Field(default=True)
-    enable_cors: bool = Field(default=True)
     
     class Config:
         env_prefix = ""
@@ -275,8 +316,6 @@ class FeatureConfig(BaseModel):
             data["enable_advanced_clustering"] = os.getenv("ENABLE_ADVANCED_CLUSTERING", "false").lower() == "true"
         if "enable_knowledge_graph" not in data:
             data["enable_knowledge_graph"] = os.getenv("ENABLE_KNOWLEDGE_GRAPH", "true").lower() == "true"
-        if "enable_cors" not in data:
-            data["enable_cors"] = os.getenv("ENABLE_CORS", "true").lower() == "true"
         super().__init__(**data)
 
 
@@ -292,6 +331,7 @@ class Config(BaseModel):
     vectorstore: VectorStoreConfig = Field(default_factory=VectorStoreConfig)
     gpu: GPUConfig = Field(default_factory=GPUConfig)
     features: FeatureConfig = Field(default_factory=FeatureConfig)
+    cors: CORSConfig = Field(default_factory=CORSConfig)
     
     def is_production(self) -> bool:
         """Check if running in production environment."""
@@ -324,3 +364,13 @@ config = Config()
 
 # Configure logging
 config.configure_logging()
+
+
+def get_settings():
+    """
+    Get application settings.
+    
+    Returns:
+        Config: Application configuration.
+    """
+    return config

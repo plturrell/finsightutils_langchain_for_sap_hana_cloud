@@ -1,0 +1,15 @@
+docker-compose.yml
+docker-compose.nvidia.yml
+docker-compose.ngc-blueprint.yml
+docker-compose.vercel-backend.yml
+docker-archive/
+NVIDIA_T4_VERCEL_DEPLOYMENT.md
+NGC_BLUEPRINT_README.md
+DEPLOYMENT_SUMMARY.md
+README_DOCKER.md
+NVIDIA_DEPLOYMENT.md
+VERCEL_DEPLOYMENT.md
+deploy_nvidia_stack.sh
+build_nvidia_local.sh
+reorganize-project.sh
+reorganization_plan.md

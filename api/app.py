@@ -41,11 +41,22 @@ from tensorrt_utils import TENSORRT_AVAILABLE
 import benchmark_api
 import developer_api
 from health import router as health_router
+from error_utils import (
+    create_context_aware_error,
+    handle_vector_search_error,
+    handle_data_insertion_error,
+)
+
+# Import version information
+from version import VERSION, get_version_info
 
 # Detect platform
 PLATFORM = os.environ.get("PLATFORM", "unknown")
-VERSION = os.environ.get("VERSION", "1.2.0")
 PLATFORM_SUPPORTS_GPU = os.environ.get("PLATFORM_SUPPORTS_GPU", "false").lower() == "true"
+
+# Log version information
+version_info = get_version_info()
+logger.info(f"Starting API version {VERSION} (Build: {version_info.get('build_id', 'development')})")
 
 # Configure logging
 logging.basicConfig(
@@ -57,18 +68,58 @@ logger = logging.getLogger(__name__)
 # Create FastAPI application
 app = FastAPI(
     title="SAP HANA Cloud Vector Store API",
-    description="API for SAP HANA Cloud vector store operations with GPU acceleration",
+    description="""
+    API for SAP HANA Cloud vector store operations with NVIDIA GPU acceleration.
+    
+    This API provides endpoints for:
+    
+    * **Embedding Generation**: Create embeddings using GPU-accelerated models
+    * **Vector Storage**: Store and retrieve vector embeddings in SAP HANA Cloud
+    * **Similarity Search**: Perform semantic search using embeddings
+    * **MMR Search**: Maximal Marginal Relevance search for diverse results
+    * **Health Monitoring**: Check system health and GPU status
+    
+    The API supports TensorRT optimization and multi-GPU acceleration for high-performance embedding generation.
+    """,
     version=VERSION,
+    contact={
+        "name": "SAP LangChain Integration Team",
+        "url": "https://github.com/sap/langchain-integration-for-sap-hana-cloud",
+    },
+    license_info={
+        "name": "Apache 2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0.html",
+    },
+    openapi_tags=[
+        {"name": "Vector Store", "description": "Operations for managing vector embeddings"},
+        {"name": "Query", "description": "Vector similarity search operations"},
+        {"name": "Health", "description": "Health check and monitoring endpoints"},
+        {"name": "GPU", "description": "GPU information and acceleration settings"},
+        {"name": "Benchmarks", "description": "Performance benchmarking endpoints"},
+        {"name": "Developer", "description": "Developer-specific operations and debugging"},
+    ],
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Add CORS middleware with secure configuration
+if config.cors.enable_cors:
+    # Log CORS configuration
+    if "*" in config.cors.allowed_origins:
+        logger.warning(
+            "CORS is configured to allow all origins (*). "
+            "This is not recommended for production environments. "
+            "Set CORS_ORIGINS environment variable to restrict allowed origins."
+        )
+    
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=config.cors.allowed_origins,
+        allow_credentials=config.cors.allow_credentials,
+        allow_methods=config.cors.allowed_methods,
+        allow_headers=config.cors.allowed_headers,
+    )
+    logger.info(f"CORS middleware enabled with {len(config.cors.allowed_origins)} allowed origins")
 
 # Request processing time middleware
 @app.middleware("http")
@@ -222,16 +273,31 @@ async def database_connection_exception_handler(
     )
 
 
-@app.get("/")
+@app.get("/", tags=["General"])
 async def root():
-    """Root endpoint."""
-    return {"message": "SAP HANA Cloud Vector Store API with NVIDIA GPU Acceleration"}
+    """
+    Root endpoint providing API information.
+    
+    Returns:
+        dict: Basic API information
+    """
+    return {
+        "message": "SAP HANA Cloud Vector Store API with NVIDIA GPU Acceleration",
+        "version": VERSION,
+        "docs_url": "/docs",
+        "redoc_url": "/redoc"
+    }
 
 
 # Legacy health check endpoint - redirects to new health router
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 async def legacy_health_check():
-    """Legacy health check endpoint that redirects to the new comprehensive health check."""
+    """
+    Legacy health check endpoint that redirects to the new comprehensive health check.
+    
+    Returns:
+        dict: Health status and information about available health endpoints
+    """
     return {
         "status": "ok",
         "message": "For more detailed health information, use the new health endpoints:",
@@ -248,7 +314,7 @@ async def legacy_health_check():
     }
 
 
-@app.post("/texts", response_model=APIResponse)
+@app.post("/texts", response_model=APIResponse, tags=["Vector Store"])
 async def add_texts(
     request: AddTextsRequest,
     service: VectorStoreService = Depends(get_vectorstore_service),
@@ -256,12 +322,20 @@ async def add_texts(
     """
     Add texts to the vector store.
     
-    Args:
-        request: Request model with texts and optional metadata.
-        service: Vector store service.
-        
+    This endpoint converts the provided texts to embeddings using the configured embedding model
+    and stores them in the SAP HANA Cloud vector store. If GPU acceleration is enabled,
+    the embedding generation will be accelerated using available NVIDIA GPUs.
+    
+    Parameters:
+    - **texts**: List of text strings to convert to embeddings and store
+    - **metadatas**: Optional list of metadata dictionaries for each text
+    - **table_name**: Optional custom table name for storing the embeddings
+    
     Returns:
-        APIResponse: API response.
+        APIResponse: Success status and message
+    
+    Raises:
+        HTTPException: If there's an error during text processing or database insertion
     """
     try:
         service.add_texts(request.texts, request.metadatas)
@@ -271,23 +345,37 @@ async def add_texts(
         )
     except Exception as e:
         logger.error(f"Failed to add texts: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to add texts: {str(e)}")
+        insertion_info = {
+            "text_count": len(request.texts),
+            "has_metadata": request.metadatas is not None,
+            "table_name": request.table_name or config.vectorstore.table_name,
+        }
+        raise handle_data_insertion_error(e, insertion_info)
 
 
-@app.post("/query", response_model=QueryResponse)
+@app.post("/query", response_model=QueryResponse, tags=["Query"])
 async def query(
     request: QueryRequest,
     service: VectorStoreService = Depends(get_vectorstore_service),
 ):
     """
-    Query the vector store.
+    Query the vector store for similar texts.
     
-    Args:
-        request: Query request.
-        service: Vector store service.
-        
+    This endpoint performs similarity search based on the input query. It converts
+    the query to an embedding vector using the configured model and finds the most
+    similar documents in the vector store.
+    
+    Parameters:
+    - **query**: Text query to search for
+    - **k**: Number of results to return (default: 4)
+    - **filter**: Optional metadata filter to narrow down search results
+    - **table_name**: Optional custom table name for the query
+    
     Returns:
-        QueryResponse: Query response.
+        QueryResponse: Object containing search results with document content and metadata
+    
+    Raises:
+        HTTPException: If there's an error during query processing or search execution
     """
     try:
         results = service.similarity_search(
@@ -298,23 +386,38 @@ async def query(
         return QueryResponse(results=results)
     except Exception as e:
         logger.error(f"Query failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
+        query_info = {
+            "query": request.query,
+            "k": request.k,
+            "has_filter": request.filter is not None,
+            "table_name": request.table_name or config.vectorstore.table_name,
+        }
+        raise handle_vector_search_error(e, query_info)
 
 
-@app.post("/query/vector", response_model=QueryResponse)
+@app.post("/query/vector", response_model=QueryResponse, tags=["Query"])
 async def query_by_vector(
     request: VectorQueryRequest,
     service: VectorStoreService = Depends(get_vectorstore_service),
 ):
     """
-    Query the vector store by vector.
+    Query the vector store using a pre-computed embedding vector.
     
-    Args:
-        request: Vector query request.
-        service: Vector store service.
-        
+    This endpoint allows direct similarity search using a pre-computed embedding vector.
+    It's useful when you've already generated embeddings elsewhere and want to skip
+    the embedding generation step.
+    
+    Parameters:
+    - **embedding**: Pre-computed embedding vector (list of floats)
+    - **k**: Number of results to return (default: 4)
+    - **filter**: Optional metadata filter to narrow down search results
+    - **table_name**: Optional custom table name for the query
+    
     Returns:
-        QueryResponse: Query response.
+        QueryResponse: Object containing search results with document content and metadata
+    
+    Raises:
+        HTTPException: If there's an error during the vector search operation
     """
     try:
         results = service.similarity_search_by_vector(
@@ -325,23 +428,40 @@ async def query_by_vector(
         return QueryResponse(results=results)
     except Exception as e:
         logger.error(f"Vector query failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Vector query failed: {str(e)}")
+        query_info = {
+            "embedding_dimensions": len(request.embedding),
+            "k": request.k,
+            "has_filter": request.filter is not None,
+            "table_name": request.table_name or config.vectorstore.table_name,
+        }
+        raise handle_vector_search_error(e, query_info)
 
 
-@app.post("/query/mmr", response_model=QueryResponse)
+@app.post("/query/mmr", response_model=QueryResponse, tags=["Query"])
 async def mmr_query(
     request: MMRQueryRequest,
     service: VectorStoreService = Depends(get_vectorstore_service),
 ):
     """
-    Perform max marginal relevance search using GPU acceleration if available.
+    Perform max marginal relevance (MMR) search for diverse results.
     
-    Args:
-        request: MMR query request.
-        service: Vector store service.
-        
+    This endpoint performs MMR search to return semantically similar but diverse results.
+    MMR balances between relevance to the query and diversity among the results.
+    The GPU-accelerated implementation provides significantly faster processing.
+    
+    Parameters:
+    - **query**: Text query to search for
+    - **k**: Number of results to return (default: 4)
+    - **fetch_k**: Number of documents to consider before reranking (default: 20)
+    - **lambda_mult**: Balance factor between relevance and diversity (0-1, default: 0.5)
+    - **filter**: Optional metadata filter to narrow down search results
+    - **table_name**: Optional custom table name for the query
+    
     Returns:
-        QueryResponse: Query response.
+        QueryResponse: Object containing diverse search results with document content and metadata
+    
+    Raises:
+        HTTPException: If there's an error during query processing or search execution
     """
     try:
         results = service.max_marginal_relevance_search(
@@ -354,23 +474,44 @@ async def mmr_query(
         return QueryResponse(results=results)
     except Exception as e:
         logger.error(f"MMR query failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"MMR query failed: {str(e)}")
+        query_info = {
+            "query": request.query,
+            "k": request.k,
+            "fetch_k": request.fetch_k,
+            "lambda_mult": request.lambda_mult,
+            "has_filter": request.filter is not None,
+            "table_name": request.table_name or config.vectorstore.table_name,
+            "mmr_enabled": True,
+        }
+        raise handle_vector_search_error(e, query_info)
 
 
-@app.post("/query/mmr/vector", response_model=QueryResponse)
+@app.post("/query/mmr/vector", response_model=QueryResponse, tags=["Query"])
 async def mmr_query_by_vector(
     request: MMRVectorQueryRequest,
     service: VectorStoreService = Depends(get_vectorstore_service),
 ):
     """
-    Perform max marginal relevance search by vector using GPU acceleration if available.
+    Perform max marginal relevance (MMR) search using a pre-computed embedding vector.
     
-    Args:
-        request: MMR vector query request.
-        service: Vector store service.
-        
+    This endpoint performs MMR search using a pre-computed embedding vector to find
+    semantically similar but diverse results. It's useful when you've already generated
+    the embedding elsewhere and want to skip the embedding generation step.
+    The GPU-accelerated implementation provides significantly faster processing.
+    
+    Parameters:
+    - **embedding**: Pre-computed embedding vector (list of floats)
+    - **k**: Number of results to return (default: 4)
+    - **fetch_k**: Number of documents to consider before reranking (default: 20)
+    - **lambda_mult**: Balance factor between relevance and diversity (0-1, default: 0.5)
+    - **filter**: Optional metadata filter to narrow down search results
+    - **table_name**: Optional custom table name for the query
+    
     Returns:
-        QueryResponse: Query response.
+        QueryResponse: Object containing diverse search results with document content and metadata
+    
+    Raises:
+        HTTPException: If there's an error during query processing or search execution
     """
     try:
         results = service.max_marginal_relevance_search_by_vector(
@@ -383,23 +524,46 @@ async def mmr_query_by_vector(
         return QueryResponse(results=results)
     except Exception as e:
         logger.error(f"MMR vector query failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"MMR vector query failed: {str(e)}")
+        query_info = {
+            "embedding_dimensions": len(request.embedding),
+            "k": request.k,
+            "fetch_k": request.fetch_k,
+            "lambda_mult": request.lambda_mult,
+            "has_filter": request.filter is not None,
+            "table_name": request.table_name or config.vectorstore.table_name,
+            "mmr_enabled": True,
+        }
+        raise handle_vector_search_error(e, query_info)
 
 
-@app.post("/delete", response_model=APIResponse)
+@app.post("/delete", response_model=APIResponse, tags=["Vector Store"])
 async def delete(
     request: DeleteRequest,
     service: VectorStoreService = Depends(get_vectorstore_service),
 ):
     """
-    Delete documents from the vector store.
+    Delete documents from the vector store based on metadata filters.
     
-    Args:
-        request: Delete request.
-        service: Vector store service.
-        
+    This endpoint allows selective deletion of documents from the vector store
+    by specifying metadata filters. For example, you can delete all documents
+    with a specific source or category.
+    
+    Parameters:
+    - **filter**: Metadata filter dictionary to select documents for deletion
+    - **table_name**: Optional custom table name to delete from
+    
     Returns:
-        APIResponse: API response.
+        APIResponse: Success status and message
+    
+    Raises:
+        HTTPException: If there's an error during the deletion process
+    
+    Example:
+        ```json
+        {
+          "filter": {"source": "database-migration-docs"}
+        }
+        ```
     """
     try:
         result = service.delete(filter=request.filter)
@@ -409,17 +573,128 @@ async def delete(
         )
     except Exception as e:
         logger.error(f"Delete failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+        additional_context = {
+            "filter": request.filter,
+            "table_name": request.table_name or config.vectorstore.table_name,
+            "operation": "delete",
+        }
+        raise create_context_aware_error(
+            str(e), 
+            "data_insertion", 
+            additional_context=additional_context
+        )
 
 
-# GPU Information endpoint
-@app.get("/gpu/info", response_model=Dict)
-async def gpu_info():
+# Embeddings generation endpoint
+@app.post("/embeddings", tags=["Vector Store"])
+async def generate_embeddings(
+    request: dict,
+    embeddings: Embeddings = Depends(get_embeddings),
+):
     """
-    Get GPU information.
+    Generate embeddings for the provided texts without storing them.
+    
+    This endpoint converts the provided texts to embeddings using the configured model
+    with GPU acceleration if available. The embeddings are returned directly without
+    storing them in the database, which is useful for client-side operations or testing.
+    
+    Parameters:
+    - **texts**: List of text strings to convert to embeddings
+    - **model**: Optional model name to use for embedding generation
     
     Returns:
-        Dict: GPU information.
+        dict: Dictionary containing the generated embeddings
+    
+    Raises:
+        HTTPException: If there's an error during the embedding generation process
+    
+    Example request:
+        ```json
+        {
+          "texts": ["This is a sample text", "Another example sentence"],
+          "model": "all-MiniLM-L6-v2"
+        }
+        ```
+    """
+    try:
+        if not request.get("texts"):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "validation_error",
+                    "message": "No texts provided for embedding generation",
+                    "context": {
+                        "operation": "embedding_generation",
+                        "suggestion": "Please provide at least one text in the 'texts' field",
+                    }
+                }
+            )
+            
+        texts = request.get("texts", [])
+        
+        # Log the request size for performance monitoring
+        logger.info(f"Generating embeddings for {len(texts)} texts")
+        
+        # Generate embeddings using the configured model with GPU acceleration
+        start_time = time.time()
+        result = embeddings.embed_documents(texts)
+        process_time = time.time() - start_time
+        
+        # Return the embeddings with timing information
+        return {
+            "embeddings": result,
+            "count": len(result),
+            "dimensions": len(result[0]) if result else 0,
+            "process_time_seconds": process_time,
+            "texts_per_second": len(texts) / process_time if process_time > 0 else 0,
+        }
+    except Exception as e:
+        logger.error(f"Embedding generation failed: {str(e)}")
+        context = {
+            "text_count": len(request.get("texts", [])),
+            "model_requested": request.get("model", "default"),
+            "operation": "embedding_generation"
+        }
+        if isinstance(e, HTTPException):
+            raise e
+        raise create_context_aware_error(str(e), "embedding_generation", context)
+
+# GPU Information endpoint
+@app.get("/gpu/info", response_model=Dict, tags=["GPU"])
+async def gpu_info():
+    """
+    Get detailed GPU information and acceleration capabilities.
+    
+    This endpoint provides information about the available NVIDIA GPUs, including:
+    - GPU availability status
+    - Number of GPUs
+    - GPU models and specs
+    - Memory information
+    - CUDA version
+    - TensorRT availability
+    - Library support (CuPy, PyTorch)
+    
+    Returns:
+        Dict: Comprehensive GPU information
+    
+    Example response:
+        ```json
+        {
+          "gpu_available": true,
+          "cupy_available": true,
+          "torch_available": true,
+          "device_count": 1,
+          "devices": [
+            {
+              "name": "NVIDIA T4",
+              "memory_total": 16384,
+              "memory_free": 15360,
+              "compute_capability": "7.5"
+            }
+          ],
+          "cuda_version": "11.7"
+        }
+        ```
     """
     is_available = gpu_utils.is_gpu_available()
     info = {
@@ -432,6 +707,53 @@ async def gpu_info():
         info.update(gpu_utils.get_gpu_info())
     
     return info
+
+
+# OpenAPI schema endpoint
+@app.get("/openapi.json", tags=["Developer"])
+async def get_openapi_schema():
+    """
+    Get the complete OpenAPI schema for the API.
+    
+    This endpoint returns the complete OpenAPI specification in JSON format.
+    This can be used for generating client libraries or documentation.
+    
+    Returns:
+        dict: The complete OpenAPI specification
+    """
+    return app.openapi()
+
+# Application shutdown event
+@app.on_event("shutdown")
+async def shutdown_event():
+    """
+    Shutdown event handler.
+    
+    Cleans up resources when the application shuts down, including:
+    - Closing all database connections
+    - Releasing GPU resources if applicable
+    """
+    from database import connection_pool
+    
+    # Close all database connections
+    logger.info("Shutting down application, cleaning up resources...")
+    
+    try:
+        connection_pool.close_all()
+        logger.info("Database connections closed successfully")
+    except Exception as e:
+        logger.error(f"Error closing database connections: {str(e)}")
+    
+    # Release GPU resources if applicable
+    try:
+        if gpu_utils.is_torch_available():
+            import torch
+            torch.cuda.empty_cache()
+            logger.info("GPU memory cache cleared")
+    except Exception as e:
+        logger.error(f"Error clearing GPU resources: {str(e)}")
+    
+    logger.info("Application shutdown complete")
 
 
 if __name__ == "__main__":

@@ -1,145 +1,86 @@
-# SAP HANA LangChain Integration Frontend
+# Frontend for SAP HANA Cloud LangChain Integration
 
-This is the frontend application for the SAP HANA Cloud LangChain integration, providing a visual interface for vector search, development, and debugging.
+This directory contains the frontend UI for the SAP HANA Cloud LangChain Integration project. The frontend is built with modern web technologies and provides a responsive, accessible interface for interacting with the SAP HANA Cloud LangChain API.
 
-## Error Handling System
+## Features
 
-### Overview
+- **Responsive Design**: Mobile-first approach for all screens and devices
+- **Accessibility**: Dark mode, high contrast, screen reader support, and keyboard navigation
+- **Interactive Visualizations**: 3D visualization of vector embeddings
+- **User Authentication**: Secure login and authentication system
+- **Error Handling**: Comprehensive error handling with helpful suggestions
+- **API Integration**: Seamless integration with the backend API
 
-The application includes a comprehensive error handling system that transforms backend errors into user-friendly, context-aware messages. This system:
+## Running the Frontend
 
-- Captures and formats API errors with consistent structure
-- Displays context-specific error messages and suggestions
-- Integrates with our backend's error interpretation system
-- Provides operation-specific suggestions to help users resolve issues
-- Presents technical details for debugging when needed
+### Local Development
 
-### Key Components
+```bash
+# Install dependencies
+npm install
 
-#### 1. ErrorHandler Component (`/src/components/ErrorHandler.tsx`)
-
-A reusable React component that displays errors with:
-- Clear, concise error messages
-- Contextual suggestions for resolving the issue
-- Common issues related to the operation
-- Technical details that can be expanded when needed
-- Contextual operation information
-
-#### 2. Error Context (`/src/context/ErrorContext.tsx`)
-
-A React context that:
-- Manages global error state
-- Provides error setter and clearing functions
-- Makes errors accessible throughout the application
-
-#### 3. Error Hook (`/src/hooks/useErrorHandler.ts`)
-
-A custom hook that:
-- Standardizes error handling across components
-- Integrates with the Error Context
-- Formats different types of errors consistently
-- Provides handleError and clearError functions
-
-#### 4. API Client Error Interceptor (`/src/api/client.ts`)
-
-Axios interceptor that:
-- Standardizes error responses
-- Ensures all errors have consistent structure
-- Adds helpful information to network and request errors
-
-### How to Use
-
-#### 1. Basic Usage in a Component
-
-```tsx
-import React, { useState } from 'react';
-import useErrorHandler from '../hooks/useErrorHandler';
-import { developerService } from '../api/services';
-
-const MyComponent = () => {
-  const { handleError, clearError } = useErrorHandler();
-  
-  const fetchData = async () => {
-    clearError(); // Clear any previous errors
-    
-    try {
-      const response = await developerService.someApiCall();
-      // Handle success
-    } catch (error) {
-      console.error("Error:", error);
-      handleError(error);
-    }
-  };
-  
-  return (
-    <div>
-      {/* Component content */}
-      <button onClick={fetchData}>Fetch Data</button>
-    </div>
-  );
-};
+# Start the development server
+npm start
 ```
 
-#### 2. Handling Different Error Types
+The frontend will be available at http://localhost:3000.
 
-The system automatically handles different types of errors:
+### Building for Production
 
-- **HTTP Errors**: Status codes, error messages from backend
-- **Network Errors**: Connection issues, timeouts
-- **Request Errors**: Invalid request parameters
-
-#### 3. Error Display
-
-Errors are automatically displayed in the main layout when using the `useErrorHandler` hook, as the Layout component includes the `ErrorHandler` component which reads from the global error context.
-
-### Backend Integration
-
-This frontend error handling system is designed to work with our backend's error interpretation system in `/api/error_utils.py`, which provides:
-
-- SQL error pattern recognition and interpretation
-- Operation-specific context and suggestions
-- Detailed error information for debugging
-
-The backend returns errors with this structure:
-
-```json
-{
-  "detail": {
-    "message": "The requested table doesn't exist in the database.",
-    "operation": "Vector Search",
-    "suggestions": [
-      "Check the table name for typos.",
-      "Verify that the table has been created.",
-      "Ensure you have the correct schema name if using schema.table notation."
-    ],
-    "common_issues": [
-      "Missing or invalid vector index",
-      "Incorrect vector dimensionality", 
-      "Table doesn't contain the expected vector column"
-    ],
-    "original_error": "table 'EMBEDDINGS' does not exist"
-  }
-}
+```bash
+# Build the frontend
+npm run build
 ```
 
-The frontend error handler parses this structure and displays it in a user-friendly way.
+The built files will be in the `build` directory.
 
-## Error Examples
+## Deployment
 
-### Database Connection Error
+### Docker Deployment
 
-![Database Connection Error](images/error-connection.png)
+```bash
+# Build and run with Docker Compose
+docker-compose -f docker-compose.frontend.yml up -d
+```
 
-### Vector Search Error
+### Vercel Deployment
 
-![Vector Search Error](images/error-vector-search.png)
+The frontend is optimized for deployment on Vercel:
 
-### API Request Error
+1. Push code to GitHub
+2. Create a new project on Vercel
+3. Configure build settings:
+   - **Framework Preset**: Other
+   - **Root Directory**: `frontend`
+   - **Build Command**: `./vercel-build.sh`
+   - **Output Directory**: `build`
+4. Set environment variables:
+   - `BACKEND_URL`: URL of your deployed backend API
+5. Deploy
 
-![API Request Error](images/error-request.png)
+## Configuration
 
-## Next Steps
+The frontend can be configured using environment variables:
 
-- Add error analytics to track common issues
-- Implement error persistence for debugging sessions
-- Add more specialized error handlers for different operations
+- `BACKEND_URL`: URL of the backend API
+- `VITE_APP_VERSION`: Application version
+- `VITE_ENABLE_ANALYTICS`: Enable analytics features
+
+These can be set in a `.env` file for local development or in the Vercel dashboard for production deployment.
+
+## Browser Compatibility
+
+The frontend is compatible with modern browsers:
+
+- Chrome (latest)
+- Firefox (latest)
+- Safari (latest)
+- Edge (latest)
+
+## Technology Stack
+
+- **React**: UI library
+- **Bootstrap 5**: CSS framework
+- **Three.js**: 3D visualization
+- **JWT**: Authentication
+- **Fetch API**: API communication

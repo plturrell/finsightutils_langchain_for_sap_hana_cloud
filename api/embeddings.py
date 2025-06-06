@@ -137,6 +137,9 @@ class GPUHybridEmbeddings(Embeddings):
         """
         self.use_internal = use_internal
         self.internal_embedding_model_id = internal_embedding_model_id
+        self.external_model_name = external_model_name
+        self.device = device
+        self.batch_size = batch_size
         
         # Initialize internal embeddings
         from langchain_hana import HanaInternalEmbeddings
@@ -144,17 +147,25 @@ class GPUHybridEmbeddings(Embeddings):
             internal_embedding_model_id=internal_embedding_model_id
         )
         
-        # Initialize external GPU-accelerated embeddings
-        self.external_embeddings = GPUAcceleratedEmbeddings(
-            model_name=external_model_name,
-            device=device,
-            batch_size=batch_size,
-        )
+        # Lazy initialization of external embeddings
+        self._external_embeddings = None
         
         logger.info(
             f"Hybrid embeddings initialized: "
             f"Using {'internal' if use_internal else 'external'} embeddings by default"
         )
+    
+    @property
+    def external_embeddings(self):
+        """Lazy initialization of external embeddings to save resources when only using internal embeddings."""
+        if self._external_embeddings is None:
+            logger.info(f"Initializing external embeddings model {self.external_model_name}")
+            self._external_embeddings = GPUAcceleratedEmbeddings(
+                model_name=self.external_model_name,
+                device=self.device,
+                batch_size=self.batch_size,
+            )
+        return self._external_embeddings
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """

@@ -1,0 +1,82 @@
+version: '3.8'
+
+name: sap-hana-langchain-standard
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: langchain-hana:latest
+    container_name: sap-hana-langchain-api
+    ports:
+      - "8000:8000"
+    environment:
+      # SAP HANA Cloud Connection
+      - HANA_HOST=${HANA_HOST}
+      - HANA_PORT=${HANA_PORT:-443}
+      - HANA_USER=${HANA_USER}
+      - HANA_PASSWORD=${HANA_PASSWORD}
+      - DEFAULT_TABLE_NAME=${DEFAULT_TABLE_NAME:-EMBEDDINGS}
+      
+      # API Configuration
+      - PORT=8000
+      - LOG_LEVEL=INFO
+      - ENABLE_CORS=true
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - JWT_SECRET=${JWT_SECRET:-sap-hana-langchain-integration-secret-key}
+      - DB_MAX_CONNECTIONS=5
+      - DB_CONNECTION_TIMEOUT=600
+      
+      # Acceleration Settings
+      - GPU_ENABLED=false
+      - BATCH_SIZE=${BATCH_SIZE:-16}
+      - MAX_BATCH_SIZE=${MAX_BATCH_SIZE:-64}
+      
+      # Error Handling
+      - ENABLE_CONTEXT_AWARE_ERRORS=true
+      - ERROR_VERBOSITY=${ERROR_VERBOSITY:-standard}
+      
+      # Vector Operations
+      - DEFAULT_EMBEDDING_MODEL=${DEFAULT_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+    volumes:
+      - api-data:/app/data
+      - api-logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: langchain-hana-frontend:latest
+    container_name: sap-hana-langchain-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - BACKEND_URL=http://api:8000
+      - VITE_APP_VERSION=1.0.0
+      - VITE_ENABLE_VECTOR_VISUALIZATION=true
+      - VITE_ENABLE_DARK_MODE=true
+      - VITE_ENABLE_ACCESSIBILITY=true
+    depends_on:
+      - api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  api-data:
+    driver: local
+  api-logs:
+    driver: local

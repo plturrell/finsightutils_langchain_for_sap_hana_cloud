@@ -1,0 +1,68 @@
+FROM nvcr.io/nvidia/pytorch:23.12-py3
+
+LABEL maintainer="sap-cloud-integration@sap.com"
+LABEL org.opencontainers.image.title="SAP HANA Cloud LangChain Integration with GPU Acceleration"
+LABEL org.opencontainers.image.description="FastAPI service for SAP HANA Cloud vector store operations with NVIDIA GPU acceleration and TensorRT optimization"
+LABEL org.opencontainers.image.vendor="SAP"
+LABEL org.opencontainers.image.source="https://github.com/SAP/langchain-integration-for-sap-hana-cloud"
+LABEL com.nvidia.volumes.needed="nvidia_driver"
+
+WORKDIR /app
+
+# Copy application files
+COPY api /app/api/
+COPY langchain_hana /app/langchain_hana/
+COPY requirements.txt /app/
+COPY VERSION /app/
+
+# Create necessary directories
+RUN mkdir -p /app/data /app/logs /app/config
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir fastapi uvicorn pydantic python-multipart psutil prometheus-client
+
+# Install TensorRT (if not already included in base image)
+RUN if ! python -c "import tensorrt" &>/dev/null; then \
+        echo "Installing TensorRT..." && \
+        pip install --no-cache-dir nvidia-tensorrt; \
+    else \
+        echo "TensorRT already installed"; \
+    fi
+
+# Install utilities
+RUN apt-get update && \
+    apt-get install -y curl vim htop net-tools && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create a simplified startup script
+RUN echo '#!/bin/bash\n\
+echo "Starting SAP HANA Cloud LangChain Integration Backend"\n\
+echo "GPU Information:"\n\
+nvidia-smi\n\
+\n\
+# Run the application with specified number of workers\n\
+exec python -m uvicorn api.app:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WORKERS:-1}\n\
+' > /app/start.sh && \
+    chmod +x /app/start.sh
+
+# Expose port
+EXPOSE 8000
+
+# Set environment variables
+ENV GPU_ENABLED=true
+ENV USE_TENSORRT=true
+ENV TENSORRT_PRECISION=fp16
+ENV LOG_LEVEL=INFO
+ENV PLATFORM=nvidia
+ENV ENABLE_CORS=true
+ENV PORT=8000
+ENV PYTHONUNBUFFERED=1
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health/ping || exit 1
+
+# Run the application
+CMD ["/app/start.sh"]

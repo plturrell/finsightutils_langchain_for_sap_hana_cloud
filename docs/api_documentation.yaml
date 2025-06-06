@@ -1,0 +1,738 @@
+openapi: 3.0.3
+info:
+  title: SAP HANA Cloud LangChain Integration API
+  description: |
+    This API provides endpoints for interacting with the SAP HANA Cloud LangChain integration, 
+    including vector similarity search, document embedding, and knowledge graph operations.
+  version: '1.0.0'
+  contact:
+    name: SAP HANA Cloud Team
+    url: https://github.com/SAP/langchain-integration-for-sap-hana-cloud
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://{server}/api/v1
+    description: Production API server
+    variables:
+      server:
+        default: api.example.com
+        description: API server domain
+  - url: http://localhost:8000/api/v1
+    description: Development server
+
+tags:
+  - name: vector-store
+    description: Vector store operations for similarity search
+  - name: embeddings
+    description: Embedding generation and management
+  - name: knowledge-graph
+    description: Knowledge graph query operations
+  - name: health
+    description: Health and status endpoints
+  - name: utilities
+    description: Utility operations
+
+paths:
+  /vector-store/similarity-search:
+    post:
+      tags:
+        - vector-store
+      summary: Perform similarity search
+      description: |
+        Search for documents similar to the provided query using vector similarity.
+        This endpoint generates embeddings for the query and performs similarity search 
+        against stored document vectors.
+      operationId: similaritySearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimilaritySearchRequest'
+      responses:
+        '200':
+          description: Successful search
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimilaritySearchResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: python
+          source: |
+            import requests
+            
+            response = requests.post(
+                "https://api.example.com/api/v1/vector-store/similarity-search",
+                json={
+                    "query": "How does SAP HANA Cloud support vector search?",
+                    "k": 5,
+                    "filter": {"source": "documentation"}
+                }
+            )
+            
+            results = response.json()["results"]
+            for result in results:
+                print(f"Score: {result['score']}")
+                print(f"Content: {result['document']['page_content']}")
+                print(f"Metadata: {result['document']['metadata']}")
+                print("---")
+
+  /vector-store/mmr-search:
+    post:
+      tags:
+        - vector-store
+      summary: Perform Maximum Marginal Relevance search
+      description: |
+        Search for relevant and diverse documents using Maximum Marginal Relevance (MMR).
+        This approach balances similarity to the query with diversity among results.
+      operationId: mmrSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MMRSearchRequest'
+      responses:
+        '200':
+          description: Successful search
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimilaritySearchResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: python
+          source: |
+            import requests
+            
+            response = requests.post(
+                "https://api.example.com/api/v1/vector-store/mmr-search",
+                json={
+                    "query": "How does SAP HANA Cloud support vector search?",
+                    "k": 5,
+                    "fetch_k": 20,
+                    "lambda_mult": 0.5,
+                    "filter": {"source": "documentation"}
+                }
+            )
+            
+            results = response.json()["results"]
+            # Process results...
+
+  /vector-store/add-documents:
+    post:
+      tags:
+        - vector-store
+      summary: Add documents to vector store
+      description: |
+        Add documents to the vector store by generating embeddings and storing them
+        along with the document content and metadata.
+      operationId: addDocuments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddDocumentsRequest'
+      responses:
+        '200':
+          description: Documents added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddDocumentsResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: python
+          source: |
+            import requests
+            
+            response = requests.post(
+                "https://api.example.com/api/v1/vector-store/add-documents",
+                json={
+                    "documents": [
+                        {
+                            "page_content": "SAP HANA Cloud supports vector search...",
+                            "metadata": {
+                                "source": "documentation",
+                                "title": "Vector Search Guide"
+                            }
+                        }
+                    ]
+                }
+            )
+            
+            print(f"Added {response.json()['document_count']} documents")
+
+  /vector-store/delete-documents:
+    post:
+      tags:
+        - vector-store
+      summary: Delete documents from vector store
+      description: |
+        Delete documents from the vector store based on metadata filters.
+      operationId: deleteDocuments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteDocumentsRequest'
+      responses:
+        '200':
+          description: Documents deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteDocumentsResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: python
+          source: |
+            import requests
+            
+            response = requests.post(
+                "https://api.example.com/api/v1/vector-store/delete-documents",
+                json={
+                    "filter": {"source": "documentation"}
+                }
+            )
+            
+            print(f"Deleted {response.json()['deleted_count']} documents")
+
+  /embeddings/create:
+    post:
+      tags:
+        - embeddings
+      summary: Generate embeddings
+      description: |
+        Generate embeddings for the provided texts using the specified model.
+      operationId: createEmbeddings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEmbeddingsRequest'
+      responses:
+        '200':
+          description: Embeddings generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateEmbeddingsResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: python
+          source: |
+            import requests
+            
+            response = requests.post(
+                "https://api.example.com/api/v1/embeddings/create",
+                json={
+                    "texts": [
+                        "SAP HANA Cloud supports vector search",
+                        "Vector search is useful for semantic similarity"
+                    ],
+                    "model": "all-MiniLM-L6-v2"
+                }
+            )
+            
+            embeddings = response.json()["embeddings"]
+            print(f"Generated {len(embeddings)} embeddings")
+
+  /knowledge-graph/sparql:
+    post:
+      tags:
+        - knowledge-graph
+      summary: Execute SPARQL query
+      description: |
+        Execute a SPARQL query against the RDF graph stored in SAP HANA Cloud.
+      operationId: executeSparqlQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SparqlQueryRequest'
+      responses:
+        '200':
+          description: Query executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SparqlQueryResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: python
+          source: |
+            import requests
+            
+            response = requests.post(
+                "https://api.example.com/api/v1/knowledge-graph/sparql",
+                json={
+                    "query": """
+                        PREFIX : <http://example.org/>
+                        SELECT ?product ?name
+                        WHERE {
+                            ?product a :Product .
+                            ?product :name ?name .
+                        }
+                        LIMIT 10
+                    """
+                }
+            )
+            
+            results = response.json()["results"]
+            print(f"Found {len(results)} products")
+
+  /health:
+    get:
+      tags:
+        - health
+      summary: Get service health
+      description: |
+        Check the health status of the service, including database connectivity and GPU availability.
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '500':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+      x-code-samples:
+        - lang: python
+          source: |
+            import requests
+            
+            response = requests.get("https://api.example.com/api/v1/health")
+            
+            status = response.json()
+            print(f"Service status: {status['status']}")
+            print(f"Database connection: {status['database']['status']}")
+            print(f"GPU availability: {status['gpu']['status']}")
+
+components:
+  schemas:
+    Document:
+      type: object
+      properties:
+        page_content:
+          type: string
+          description: The text content of the document
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Metadata associated with the document
+      required:
+        - page_content
+
+    SearchResult:
+      type: object
+      properties:
+        document:
+          $ref: '#/components/schemas/Document'
+        score:
+          type: number
+          format: float
+          description: Similarity score between 0 and 1
+      required:
+        - document
+        - score
+
+    SimilaritySearchRequest:
+      type: object
+      properties:
+        query:
+          type: string
+          description: The query text to search for
+        k:
+          type: integer
+          description: Number of results to return
+          default: 4
+          minimum: 1
+        filter:
+          type: object
+          additionalProperties: true
+          description: Metadata filter to apply
+        use_tensorrt:
+          type: boolean
+          description: Whether to use TensorRT acceleration
+          default: true
+      required:
+        - query
+
+    MMRSearchRequest:
+      type: object
+      properties:
+        query:
+          type: string
+          description: The query text to search for
+        k:
+          type: integer
+          description: Number of results to return
+          default: 4
+          minimum: 1
+        fetch_k:
+          type: integer
+          description: Number of documents to fetch before reranking
+          default: 20
+          minimum: 1
+        lambda_mult:
+          type: number
+          format: float
+          description: Balance between relevance and diversity (0 = max diversity, 1 = max relevance)
+          default: 0.5
+          minimum: 0
+          maximum: 1
+        filter:
+          type: object
+          additionalProperties: true
+          description: Metadata filter to apply
+        use_tensorrt:
+          type: boolean
+          description: Whether to use TensorRT acceleration
+          default: true
+      required:
+        - query
+
+    SimilaritySearchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResult'
+        query_embedding:
+          type: array
+          items:
+            type: number
+            format: float
+          description: The embedding vector of the query
+        execution_stats:
+          type: object
+          properties:
+            total_time_ms:
+              type: number
+              format: float
+              description: Total execution time in milliseconds
+            embedding_time_ms:
+              type: number
+              format: float
+              description: Time spent generating embeddings
+            search_time_ms:
+              type: number
+              format: float
+              description: Time spent performing the search
+            batch_size:
+              type: integer
+              description: Batch size used for embedding generation
+            gpu_utilized:
+              type: boolean
+              description: Whether GPU acceleration was used
+      required:
+        - results
+
+    AddDocumentsRequest:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+          description: Documents to add to the vector store
+        batch_size:
+          type: integer
+          description: Batch size for processing
+          default: 64
+        use_tensorrt:
+          type: boolean
+          description: Whether to use TensorRT acceleration
+          default: true
+      required:
+        - documents
+
+    AddDocumentsResponse:
+      type: object
+      properties:
+        document_count:
+          type: integer
+          description: Number of documents added
+        execution_stats:
+          type: object
+          properties:
+            total_time_ms:
+              type: number
+              format: float
+              description: Total execution time in milliseconds
+            embedding_time_ms:
+              type: number
+              format: float
+              description: Time spent generating embeddings
+            insertion_time_ms:
+              type: number
+              format: float
+              description: Time spent inserting into database
+            batch_size:
+              type: integer
+              description: Batch size used for embedding generation
+            gpu_utilized:
+              type: boolean
+              description: Whether GPU acceleration was used
+      required:
+        - document_count
+
+    DeleteDocumentsRequest:
+      type: object
+      properties:
+        filter:
+          type: object
+          additionalProperties: true
+          description: Metadata filter to select documents to delete
+      required:
+        - filter
+
+    DeleteDocumentsResponse:
+      type: object
+      properties:
+        deleted_count:
+          type: integer
+          description: Number of documents deleted
+      required:
+        - deleted_count
+
+    CreateEmbeddingsRequest:
+      type: object
+      properties:
+        texts:
+          type: array
+          items:
+            type: string
+          description: Texts to generate embeddings for
+        model:
+          type: string
+          description: Name of the embedding model to use
+          default: "all-MiniLM-L6-v2"
+        batch_size:
+          type: integer
+          description: Batch size for processing
+          default: 64
+        use_tensorrt:
+          type: boolean
+          description: Whether to use TensorRT acceleration
+          default: true
+      required:
+        - texts
+
+    CreateEmbeddingsResponse:
+      type: object
+      properties:
+        embeddings:
+          type: array
+          items:
+            type: array
+            items:
+              type: number
+              format: float
+          description: Generated embedding vectors
+        execution_stats:
+          type: object
+          properties:
+            total_time_ms:
+              type: number
+              format: float
+              description: Total execution time in milliseconds
+            embeddings_per_second:
+              type: number
+              format: float
+              description: Embeddings generated per second
+            batch_size:
+              type: integer
+              description: Batch size used
+            gpu_utilized:
+              type: boolean
+              description: Whether GPU acceleration was used
+      required:
+        - embeddings
+
+    SparqlQueryRequest:
+      type: object
+      properties:
+        query:
+          type: string
+          description: SPARQL query to execute
+      required:
+        - query
+
+    SparqlQueryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Query results as a list of bindings
+        execution_stats:
+          type: object
+          properties:
+            total_time_ms:
+              type: number
+              format: float
+              description: Total execution time in milliseconds
+      required:
+        - results
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+          description: Overall service status
+        version:
+          type: string
+          description: Service version
+        database:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [connected, disconnected, error]
+            message:
+              type: string
+          required:
+            - status
+        gpu:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [available, unavailable, error]
+            device:
+              type: string
+            message:
+              type: string
+          required:
+            - status
+        uptime:
+          type: number
+          format: float
+          description: Service uptime in seconds
+      required:
+        - status
+        - version
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          description: HTTP status code
+        statusText:
+          type: string
+          description: HTTP status text
+        detail:
+          type: object
+          properties:
+            message:
+              type: string
+              description: Error message
+            operation:
+              type: string
+              description: Operation that caused the error
+            suggestions:
+              type: array
+              items:
+                type: string
+              description: Suggestions for fixing the error
+            common_issues:
+              type: array
+              items:
+                type: string
+              description: Common issues that might cause this error
+            original_error:
+              type: string
+              description: Original error message
+          required:
+            - message
+      required:
+        - status
+        - statusText
+        - detail

@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langchain-hana-api
+  namespace: langchain-hana-staging
+  labels:
+    app: langchain-hana-api
+    environment: staging
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: langchain-hana-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: langchain-hana-api
+        environment: staging
+    spec:
+      containers:
+      - name: langchain-hana-api
+        image: ghcr.io/sap/langchain-integration-for-sap-hana-cloud/backend:latest
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+          requests:
+            memory: "4Gi"
+            cpu: "1"
+        envFrom:
+        - configMapRef:
+            name: langchain-hana-config
+        - secretRef:
+            name: langchain-hana-secrets
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      nodeSelector:
+        accelerator: nvidia-gpu

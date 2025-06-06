@@ -1,0 +1,182 @@
+name: CI Tests for LangChain SAP HANA Integration
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff black mypy
+          pip install -e ".[dev]"
+      - name: Lint with ruff
+        run: ruff .
+      - name: Check formatting with black
+        run: black --check .
+      - name: Type check with mypy
+        run: mypy langchain_hana
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov
+          pip install -e ".[dev,test]"
+      - name: Run tests
+        run: |
+          pytest --cov=langchain_hana tests/ --cov-report=xml
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  gpu-tests:
+    name: GPU Compatibility Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest torch
+          pip install -e ".[dev,test]"
+      - name: Run GPU compatibility checks
+        run: |
+          python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+          python -c "import langchain_hana.gpu.tensor_core_optimizer; print('TensorCore module loaded successfully')"
+      - name: Run mock GPU tests
+        run: |
+          python -m pytest tests/gpu/test_gpu_compatibility.py -v
+
+  api-tests:
+    name: API Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest requests fastapi uvicorn
+          pip install -e ".[dev,api,test]"
+      - name: Start API server
+        run: |
+          uvicorn api.app:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+      - name: Run API tests
+        run: |
+          python -m pytest tests/api/test_api.py -v
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      # Use a mock database for integration tests
+      mock-db:
+        image: ghcr.io/sap-samples/hana-cloud-emulator:latest
+        ports:
+          - 39041:39041
+        env:
+          HANA_PASSWORD: HanaPassword1
+    env:
+      HANA_CONNECTION_STRING: "localhost:39041"
+      HANA_USER: SYSTEM
+      HANA_PASSWORD: HanaPassword1
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          pip install -e ".[dev,test]"
+      - name: Wait for database
+        run: |
+          echo "Waiting for database to be ready..."
+          timeout 60 bash -c 'until nc -z localhost 39041; do sleep 1; done'
+      - name: Run integration tests
+        run: |
+          python -m pytest tests/integration/test_hana_integration.py -v
+
+  docker-build:
+    name: Test Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Build Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: langchain-hana:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Test Docker image
+        run: |
+          docker run --rm langchain-hana:test python -c "import langchain_hana; print('LangChain HANA package imported successfully')"
+
+  tensor-core-build:
+    name: Test TensorCore Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Build Docker image with TensorRT support
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile.nvidia
+          push: false
+          tags: langchain-hana-tensorrt:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            TENSORRT_ENABLED=true
+            BASE_IMAGE=nvcr.io/nvidia/pytorch:22.12-py3
+      - name: Verify TensorRT modules
+        run: |
+          docker run --rm langchain-hana-tensorrt:test python -c "import langchain_hana.gpu.tensor_core_optimizer; print('TensorCore module loaded successfully')"
