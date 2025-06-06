@@ -1,0 +1,81 @@
+version: '3.8'
+
+name: sap-hana-langchain-dev
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    image: langchain-hana-dev:latest
+    container_name: sap-hana-langchain-api-dev
+    ports:
+      - "8000:8000"
+    environment:
+      # SAP HANA Cloud Connection
+      - HANA_HOST=${HANA_HOST}
+      - HANA_PORT=${HANA_PORT:-443}
+      - HANA_USER=${HANA_USER}
+      - HANA_PASSWORD=${HANA_PASSWORD}
+      - DEFAULT_TABLE_NAME=${DEFAULT_TABLE_NAME:-EMBEDDINGS_DEV}
+      
+      # API Configuration
+      - PORT=8000
+      - LOG_LEVEL=DEBUG
+      - ENABLE_CORS=true
+      - CORS_ORIGINS=*
+      - JWT_SECRET=dev-secret-key
+      - DB_MAX_CONNECTIONS=5
+      - DB_CONNECTION_TIMEOUT=600
+      
+      # Error Handling
+      - ENABLE_CONTEXT_AWARE_ERRORS=true
+      - ERROR_VERBOSITY=verbose
+      - ENABLE_ERROR_TELEMETRY=false
+      
+      # Vector Operations
+      - ENABLE_PRECISE_SIMILARITY=true
+      - DEFAULT_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+      - ENABLE_VECTOR_VISUALIZATION=true
+    volumes:
+      - ../:/app
+      - api-dev-data:/app/data
+      - api-dev-logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    command: ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/Dockerfile.frontend.dev
+    image: langchain-hana-frontend-dev:latest
+    container_name: sap-hana-langchain-frontend-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - BACKEND_URL=http://api:8000
+      - VITE_APP_VERSION=dev
+      - VITE_ENABLE_VECTOR_VISUALIZATION=true
+      - VITE_ENABLE_DARK_MODE=true
+      - VITE_ENABLE_ACCESSIBILITY=true
+      - VITE_DEV_MODE=true
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    restart: unless-stopped
+    command: ["npm", "run", "dev"]
+
+volumes:
+  api-dev-data:
+    driver: local
+  api-dev-logs:
+    driver: local

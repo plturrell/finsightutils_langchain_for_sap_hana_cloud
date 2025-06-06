@@ -2,6 +2,8 @@
 
 This guide provides detailed instructions for deploying the SAP HANA LangChain integration with Docker, including standard deployment, NVIDIA GPU acceleration, and blue-green deployment for zero-downtime updates.
 
+> **Important Update**: All Docker files have been consolidated in the [docker/](./docker/) directory for better organization. Please use the configurations from this directory for deployment.
+
 ## Table of Contents
 
 - [Standard Deployment](#standard-deployment)
@@ -37,12 +39,12 @@ This guide provides detailed instructions for deploying the SAP HANA LangChain i
 
 3. Start the containers:
    ```bash
-   docker-compose up -d
+   docker-compose -f docker/docker-compose.yml up -d
    ```
 
 4. Verify deployment:
    ```bash
-   docker-compose ps
+   docker-compose -f docker/docker-compose.yml ps
    curl http://localhost:8000/health/ping
    ```
 
@@ -71,12 +73,12 @@ This guide provides detailed instructions for deploying the SAP HANA LangChain i
 
 3. Start the containers with NVIDIA GPU support:
    ```bash
-   docker-compose -f config/docker/docker-compose.nvidia.yml --env-file .env.nvidia up -d
+   docker-compose -f docker/docker-compose.nvidia.yml --env-file .env.nvidia up -d
    ```
 
 4. Verify deployment:
    ```bash
-   docker-compose -f config/docker/docker-compose.nvidia.yml ps
+   docker-compose -f docker/docker-compose.nvidia.yml ps
    curl http://localhost:8000/health/ping
    ```
 
@@ -118,12 +120,12 @@ The blue-green deployment consists of:
 
 2. Start the blue-green deployment:
    ```bash
-   docker-compose -f config/docker/docker-compose.blue-green.yml --env-file .env.blue-green up -d
+   docker-compose -f docker/docker-compose.blue-green.yml --env-file .env.blue-green up -d
    ```
 
 3. Verify the deployment:
    ```bash
-   docker-compose -f config/docker/docker-compose.blue-green.yml ps
+   docker-compose -f docker/docker-compose.blue-green.yml ps
    
    # Check which deployment is active
    curl http://localhost/api/deployment/status

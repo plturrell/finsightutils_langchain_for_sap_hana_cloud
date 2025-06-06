@@ -1,0 +1,44 @@
+ARG BASE_IMAGE=nvcr.io/nvidia/pytorch:23.12-py3
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    wget \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements files
+COPY requirements.txt .
+COPY api/requirements-tensorrt.txt ./api/
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r api/requirements-tensorrt.txt
+
+# Create directory for TensorRT engines
+RUN mkdir -p /app/trt_engines && chmod 777 /app/trt_engines
+
+# Copy application code
+COPY . .
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8000 \
+    GPU_ENABLED=true \
+    USE_TENSORRT=true \
+    TENSORRT_ENGINE_CACHE_DIR=/app/trt_engines
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health/ping || exit 1
+
+# Run the application
+CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
