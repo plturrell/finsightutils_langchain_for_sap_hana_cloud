@@ -26,7 +26,7 @@ os.environ["PLATFORM_SUPPORTS_GPU"] = "false"
 os.environ["VERSION"] = "1.2.0-test"
 
 # Import app for API testing
-from api.app import app
+from api import app
 from fastapi.testclient import TestClient
 
 # Create test client

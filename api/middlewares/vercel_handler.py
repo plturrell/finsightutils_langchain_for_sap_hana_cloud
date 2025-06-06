@@ -27,8 +27,8 @@ logger = logging.getLogger("vercel_handler")
 logger.info("Initializing Vercel serverless function with error handling support")
 
 # Now import app
-from app import app
-from vercel_middleware import setup_middleware
+from api import app
+from api.middlewares.vercel_middleware import setup_middleware
 
 # Set up middleware for Vercel deployment
 app = setup_middleware(app)

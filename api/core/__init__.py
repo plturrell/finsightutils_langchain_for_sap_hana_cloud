@@ -1,11 +1,14 @@
 """
 Core components for SAP HANA Cloud integration API.
 
-This module provides core functionality for the API.
+This module provides core functionality for the API and exports the main application 
+entry point and Vercel serverless handler.
 """
 
-# Import core components here when they are moved to this directory
+from api.core.main import app, handler
 
+# Export for direct import from api.core
 __all__ = [
-    # Core components
+    "app",
+    "handler"
 ]

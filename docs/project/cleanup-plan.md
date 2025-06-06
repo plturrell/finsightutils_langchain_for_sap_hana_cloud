@@ -79,7 +79,7 @@
 - [ ] package.json
 - [ ] .gitignore
 - [ ] .pre-commit-config.yaml
-- [ ] app.py (main application entry point)
+- [ ] api/core/main.py (main application entry point)
 
 ## Cleanup Tasks
 

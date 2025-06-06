@@ -37,8 +37,15 @@ from api.utils import (
     TimeoutManager
 )
 
+# Import main application and Vercel handler
+from api.core import app, handler
+
 __all__ = [
     "__version__",
+    
+    # Main FastAPI application and Vercel handler
+    "app",
+    "handler",
     
     # Embeddings
     "EmbeddingProvider",

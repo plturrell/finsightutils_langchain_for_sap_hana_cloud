@@ -489,14 +489,14 @@ AUTH_ENABLED=false
   },
   "builds": [
     {
-      "src": "api/vercel_app.py",
+      "src": "api/core/main.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "api/vercel_app.py"
+      "dest": "api/core/main.py"
     }
   ]
 }

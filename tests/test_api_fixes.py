@@ -24,10 +24,10 @@ from fastapi.testclient import TestClient
 from hdbcli import dbapi
 from pydantic import BaseModel
 
-import app
-from config import Config, get_settings
-from database import ConnectionPool, get_db_connection
-from version import get_version, get_version_info
+from api import app
+from api.config import Config, get_settings
+from api.database import ConnectionPool, get_db_connection
+from api.version import get_version, get_version_info
 
 
 class TestAPIFixes(unittest.TestCase):
@@ -75,7 +75,7 @@ class TestAPIFixes(unittest.TestCase):
         self.assertEqual(data["version"], "1.0.0-test")
         self.assertEqual(data["backend"], "test")
     
-    @patch("app.VectorStoreService")
+    @patch("api.core.main.VectorStoreService")
     def test_error_handling(self, mock_service):
         """Test context-aware error handling."""
         # Mock a database error

@@ -153,13 +153,13 @@ Make sure your Vercel configuration is set up correctly:
 {
   "version": 2,
   "functions": {
-    "api/vercel_app.py": {
+    "api/core/main.py": {
       "memory": 1024,
       "maxDuration": 10
     }
   },
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/vercel_app.py" }
+    { "src": "/api/(.*)", "dest": "/api/core/main.py" }
   ]
 }
 ```
@@ -317,7 +317,7 @@ pip install -r requirements.txt
 3. **Run the API server**:
 
 ```bash
-uvicorn app:app --reload --host 0.0.0.0 --port 8000
+uvicorn api.core.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Frontend Setup
