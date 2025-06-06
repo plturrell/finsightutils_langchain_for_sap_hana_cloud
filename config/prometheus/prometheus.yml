@@ -1,0 +1,50 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # Blue deployment metrics
+  - job_name: "api-blue"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api-blue:8000"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: deployment
+        replacement: blue
+
+  # Green deployment metrics
+  - job_name: "api-green"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api-green:8000"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: deployment
+        replacement: green
+
+  # Traefik metrics
+  - job_name: "traefik"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["traefik:8080"]
+
+  # Docker metrics
+  - job_name: "docker"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["dockerexporter:9323"]
+
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["localhost:9090"]

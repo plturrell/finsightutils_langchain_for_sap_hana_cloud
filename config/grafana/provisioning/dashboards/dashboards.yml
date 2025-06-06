@@ -1,0 +1,19 @@
+apiVersion: 1
+
+providers:
+  # <string> provider name
+  - name: 'SAP HANA LangChain Dashboard Provider'
+    # <string> provider type
+    type: file
+    # <bool> disable dashboard deletion
+    disableDeletion: false
+    # <bool> enable dashboard editing
+    editable: true
+    # <int> how often Grafana will scan for changed dashboards
+    updateIntervalSeconds: 30
+    # <path> folder path
+    options:
+      # <path> path to dashboards on disk
+      path: /etc/grafana/provisioning/dashboards/json
+      # <bool> use folder names from filesystem to create folders in Grafana
+      foldersFromFilesStructure: true
