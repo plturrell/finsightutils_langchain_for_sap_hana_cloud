@@ -1,0 +1,155 @@
+name: finsightutils-langchain-for-sap-hana-cloud
+version: 1.0.0
+description: SAP HANA Cloud LangChain Integration with NVIDIA GPU acceleration and TensorRT optimization
+
+# Blueprint metadata
+author: plturrell
+website: https://github.com/plturrell/finsightutils_langchain_for_sap_hana_cloud
+license: Apache-2.0
+documentation: https://github.com/plturrell/finsightutils_langchain_for_sap_hana_cloud/blob/main/README.md
+category: AI/ML
+tags:
+  - sap
+  - hana
+  - langchain
+  - vectorstore
+  - gpu
+  - tensorrt
+
+# System requirements
+hardware:
+  gpu: required
+  gpu_type: nvidia-t4
+  min_gpu_count: 1
+  gpu_memory: 16GB
+  memory: 32GB
+  cpu_cores: 8
+  storage: 50GB
+
+# Blueprint configuration
+configuration:
+  environment_variables:
+    - name: HANA_HOST
+      description: SAP HANA Cloud host
+      required: true
+    - name: HANA_PORT
+      description: SAP HANA Cloud port
+      default: "443"
+    - name: HANA_USER
+      description: SAP HANA Cloud username
+      required: true
+    - name: HANA_PASSWORD
+      description: SAP HANA Cloud password
+      required: true
+      secret: true
+    - name: DEFAULT_TABLE_NAME
+      description: Default table for vector store
+      default: "EMBEDDINGS"
+    - name: GPU_ENABLED
+      default: "true"
+    - name: USE_TENSORRT
+      default: "true"
+    - name: TENSORRT_PRECISION
+      default: "fp16"
+    - name: BATCH_SIZE
+      default: "32"
+    - name: MAX_BATCH_SIZE
+      default: "128"
+    - name: ENABLE_MULTI_GPU
+      default: "true"
+    - name: GPU_MEMORY_FRACTION
+      default: "0.9"
+    - name: PORT
+      default: "8000"
+    - name: LOG_LEVEL
+      default: "INFO"
+    - name: ENABLE_CORS
+      default: "true"
+    - name: CORS_ORIGINS
+      default: "*"
+    - name: JWT_SECRET
+      default: "sap-hana-langchain-integration-secret-key"
+      secret: true
+
+  ports:
+    - port: 8000
+      protocol: http
+      description: API service
+    - port: 3000
+      protocol: http
+      description: Frontend service
+
+# Installation and setup
+installation:
+  repository:
+    url: https://github.com/plturrell/finsightutils_langchain_for_sap_hana_cloud.git
+    branch: nvidia-vercel-deployment
+  
+  initialization:
+    script: .brev/startup.sh
+  
+  dependencies:
+    python:
+      - requirements.txt
+    apt:
+      - curl
+      - wget
+      - git
+
+# Services
+services:
+  - name: api
+    type: web
+    command: "python -m uvicorn api.core.main:app --host 0.0.0.0 --port 8000 --workers 4"
+    port: 8000
+    health_check:
+      path: /health/ping
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  
+  - name: frontend
+    type: web
+    command: "cd frontend && npm start"
+    port: 3000
+    depends_on:
+      - api
+
+# Post-installation checks
+checks:
+  - name: API health check
+    command: "curl -f http://localhost:8000/health/ping"
+    timeout: 10s
+    retries: 3
+  
+  - name: GPU acceleration check
+    command: "curl -f http://localhost:8000/gpu/info"
+    timeout: 10s
+    retries: 3
+
+# Additional documentation
+documentation:
+  short_description: |
+    GPU-accelerated vector search for SAP HANA Cloud using LangChain with NVIDIA TensorRT optimization.
+  
+  usage_example: |
+    # Connect to the API
+    BASE_URL="http://localhost:8000"
+    
+    # Add texts to the vector store
+    curl -X POST "$BASE_URL/texts" \
+      -H "Content-Type: application/json" \
+      -d '{"texts": ["This is a sample text", "Another example text"], "metadatas": [{"source": "example"}, {"source": "example"}]}'
+    
+    # Query the vector store
+    curl -X POST "$BASE_URL/query" \
+      -H "Content-Type: application/json" \
+      -d '{"query": "sample", "k": 2}'
+  
+  additional_resources:
+    - title: GitHub Repository
+      url: https://github.com/plturrell/finsightutils_langchain_for_sap_hana_cloud
+    - title: SAP HANA Cloud Documentation
+      url: https://help.sap.com/docs/HANA_CLOUD
+    - title: LangChain Documentation
+      url: https://python.langchain.com/docs/get_started

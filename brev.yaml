@@ -1,0 +1,194 @@
+name: finsightutils-langchain-for-sap-hana-cloud
+version: 1.0.0
+description: SAP HANA Cloud LangChain Integration with NVIDIA GPU acceleration and TensorRT optimization
+
+# Repository metadata
+repository:
+  url: https://github.com/plturrell/finsightutils_langchain_for_sap_hana_cloud.git
+  branch: nvidia-vercel-deployment
+
+# System requirements
+resources:
+  gpus:
+    count: 1
+    type: nvidia-t4
+  cpu:
+    cores: 8
+  memory:
+    size: 32Gi
+  storage:
+    size: 50Gi
+
+# Environment setup
+setup:
+  - name: Install dependencies
+    run: |
+      pip install --no-cache-dir -r requirements.txt
+      pip install --no-cache-dir nvidia-tensorrt
+
+  - name: Verify GPU availability
+    run: |
+      python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU count: {torch.cuda.device_count()}'); [print(f'GPU {i}: {torch.cuda.get_device_name(i)}') for i in range(torch.cuda.device_count())]"
+
+# Environment variables
+env:
+  # SAP HANA Cloud Connection
+  - name: HANA_HOST
+    description: SAP HANA Cloud host
+    required: true
+  - name: HANA_PORT
+    description: SAP HANA Cloud port
+    default: "443"
+  - name: HANA_USER
+    description: SAP HANA Cloud username
+    required: true
+  - name: HANA_PASSWORD
+    description: SAP HANA Cloud password
+    required: true
+    secret: true
+  - name: DEFAULT_TABLE_NAME
+    description: Default table for vector store
+    default: "EMBEDDINGS"
+  
+  # GPU Acceleration
+  - name: GPU_ENABLED
+    default: "true"
+  - name: USE_TENSORRT
+    default: "true"
+  - name: TENSORRT_PRECISION
+    default: "fp16"
+  - name: BATCH_SIZE
+    default: "32"
+  - name: MAX_BATCH_SIZE
+    default: "128"
+  - name: ENABLE_MULTI_GPU
+    default: "true"
+  - name: GPU_MEMORY_FRACTION
+    default: "0.9"
+  
+  # API Configuration
+  - name: PORT
+    default: "8000"
+  - name: LOG_LEVEL
+    default: "INFO"
+  - name: ENABLE_CORS
+    default: "true"
+  - name: CORS_ORIGINS
+    default: "*"
+  - name: JWT_SECRET
+    default: "sap-hana-langchain-integration-secret-key"
+    secret: true
+
+# Service definitions
+services:
+  - name: api
+    type: web
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.nvidia
+    ports:
+      - "8000:8000"
+    command: ["python", "-m", "uvicorn", "api.core.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+    healthcheck:
+      path: /health/ping
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - name: trt-engines
+        mountPath: /app/trt_engines
+      - name: api-data
+        mountPath: /app/data
+      - name: api-logs
+        mountPath: /app/logs
+    resources:
+      gpu: true
+  
+  - name: frontend
+    type: web
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: BACKEND_URL
+        value: http://api:8000
+      - name: VITE_ENABLE_VECTOR_VISUALIZATION
+        value: "true"
+      - name: VITE_ENABLE_DARK_MODE
+        value: "true"
+      - name: VITE_ENABLE_ACCESSIBILITY
+        value: "true"
+
+# Persistent volumes
+volumes:
+  - name: trt-engines
+    size: 5Gi
+  - name: api-data
+    size: 10Gi
+  - name: api-logs
+    size: 2Gi
+
+# Expose endpoints
+endpoints:
+  - name: api
+    service: api
+    port: 8000
+    path: /
+    public: true
+  
+  - name: frontend
+    service: frontend
+    port: 3000
+    path: /
+    public: true
+
+# Post-deployment checks
+checks:
+  - name: API health check
+    command: curl -f http://localhost:8000/health/ping
+    timeout: 10s
+    retries: 3
+  
+  - name: GPU acceleration check
+    command: curl -f http://localhost:8000/gpu/info
+    timeout: 10s
+    retries: 3
+
+# Documentation and metadata for the blueprint
+metadata:
+  tags:
+    - sap
+    - hana
+    - langchain
+    - vectorstore
+    - gpu
+    - tensorrt
+  documentation:
+    usage: |
+      # SAP HANA Cloud LangChain Integration with NVIDIA GPU Acceleration
+      
+      This blueprint deploys a GPU-accelerated vector search service for SAP HANA Cloud integration.
+      
+      ## Features
+      
+      - TensorRT-optimized embedding generation
+      - Multi-GPU support
+      - Vector similarity search
+      - Context-aware error handling
+      - Web UI for visualization
+      
+      ## Getting Started
+      
+      1. Deploy the blueprint with your SAP HANA Cloud credentials
+      2. Access the API at the public endpoint
+      3. Access the frontend at the public endpoint
+      
+      ## API Documentation
+      
+      The API documentation is available at `/docs` on the API endpoint.

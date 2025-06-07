@@ -1,0 +1,55 @@
+{
+  "name": "finsightutils-langchain-for-sap-hana-cloud",
+  "version": "1.0.0",
+  "description": "SAP HANA Cloud LangChain Integration with NVIDIA GPU acceleration and TensorRT optimization",
+  "author": "plturrell",
+  "repository": "https://github.com/plturrell/finsightutils_langchain_for_sap_hana_cloud.git",
+  "category": "AI/ML",
+  "tags": ["sap", "hana", "langchain", "vectorstore", "gpu", "tensorrt"],
+  "license": "Apache-2.0",
+  "hardware": {
+    "gpu": "required",
+    "gpu_type": "NVIDIA T4",
+    "min_gpu_count": 1,
+    "recommended_gpu_count": 1,
+    "min_memory": "16Gi",
+    "recommended_memory": "32Gi",
+    "min_cpu": 4,
+    "recommended_cpu": 8
+  },
+  "ports": [
+    {
+      "port": 8000,
+      "protocol": "http",
+      "description": "API service"
+    },
+    {
+      "port": 3000,
+      "protocol": "http",
+      "description": "Frontend service"
+    }
+  ],
+  "variables": [
+    {
+      "name": "HANA_HOST",
+      "description": "SAP HANA Cloud host",
+      "required": true
+    },
+    {
+      "name": "HANA_PORT",
+      "description": "SAP HANA Cloud port",
+      "default": "443"
+    },
+    {
+      "name": "HANA_USER",
+      "description": "SAP HANA Cloud username",
+      "required": true
+    },
+    {
+      "name": "HANA_PASSWORD",
+      "description": "SAP HANA Cloud password",
+      "required": true,
+      "secret": true
+    }
+  ]
+}
