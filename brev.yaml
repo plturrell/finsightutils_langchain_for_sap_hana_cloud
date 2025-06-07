@@ -25,10 +25,80 @@ setup:
     run: |
       pip install --no-cache-dir -r requirements.txt
       pip install --no-cache-dir nvidia-tensorrt
+      pip install --no-cache-dir --extra-index-url https://developer.download.nvidia.com/compute/redist nvidia-dali-cuda110
+      pip install --no-cache-dir triton-client
 
   - name: Verify GPU availability
     run: |
       python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU count: {torch.cuda.device_count()}'); [print(f'GPU {i}: {torch.cuda.get_device_name(i)}') for i in range(torch.cuda.device_count())]"
+
+  - name: Configure model optimization
+    run: |
+      mkdir -p /app/trt_engines /app/models /app/calibration_cache
+      python -m scripts.optimize_models \
+        --precision=${TENSORRT_PRECISION:-fp16} \
+        --batch-sizes=1,2,4,8,16,32,64,128 \
+        --calibration-cache=/app/calibration_cache \
+        --export-format=tensorrt,onnx
+
+  - name: Configure monitoring
+    run: |
+      # Install monitoring tools
+      pip install --no-cache-dir prometheus-client opentelemetry-api opentelemetry-sdk
+      
+      # Configure DCGM Exporter
+      mkdir -p /etc/dcgm-exporter
+      cat > /etc/dcgm-exporter/default-counters.csv << EOF
+      # Format,,
+      # DCGM FI Field ID, Prometheus metric type, help message
+      
+      # GPU utilization
+      DCGM_FI_DEV_GPU_UTIL, gauge, GPU utilization (in %)
+      
+      # Memory utilization
+      DCGM_FI_DEV_FB_USED, gauge, GPU framebuffer memory used (in MiB)
+      DCGM_FI_DEV_FB_FREE, gauge, GPU framebuffer memory free (in MiB)
+      DCGM_FI_DEV_FB_TOTAL, gauge, GPU framebuffer memory total (in MiB)
+      
+      # SM clocks
+      DCGM_FI_DEV_SM_CLOCK, gauge, SM clock frequency (in MHz)
+      
+      # Memory clocks
+      DCGM_FI_DEV_MEM_CLOCK, gauge, Memory clock frequency (in MHz)
+      
+      # Power usage
+      DCGM_FI_DEV_POWER_USAGE, gauge, Power usage (in W)
+      
+      # Temperature
+      DCGM_FI_DEV_GPU_TEMP, gauge, GPU temperature (in C)
+      
+      # PCIe throughput
+      DCGM_FI_DEV_PCIE_TX_THROUGHPUT, gauge, PCIe transmit throughput (in KB/s)
+      DCGM_FI_DEV_PCIE_RX_THROUGHPUT, gauge, PCIe receive throughput (in KB/s)
+      EOF
+      
+      # Configure Prometheus
+      mkdir -p /etc/prometheus
+      cat > /etc/prometheus/prometheus.yml << EOF
+      global:
+        scrape_interval: 15s
+        evaluation_interval: 15s
+      scrape_configs:
+        - job_name: 'dcgm'
+          static_configs:
+            - targets: ['dcgm-exporter:9400']
+        - job_name: 'api'
+          static_configs:
+            - targets: ['api:8000']
+        - job_name: 'triton'
+          static_configs:
+            - targets: ['triton-server:8002']
+      EOF
+
+  - name: Install security tools
+    run: |
+      curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+      pip install --no-cache-dir safety bandit
 
 # Environment variables
 env:
@@ -52,31 +122,52 @@ env:
   
   # GPU Acceleration
   - name: GPU_ENABLED
+    description: Enable GPU acceleration
     default: "true"
   - name: USE_TENSORRT
+    description: Enable TensorRT optimization
     default: "true"
   - name: TENSORRT_PRECISION
+    description: TensorRT precision mode (fp32, fp16, int8)
     default: "fp16"
   - name: BATCH_SIZE
+    description: Default batch size for operations
     default: "32"
   - name: MAX_BATCH_SIZE
+    description: Maximum batch size for operations
     default: "128"
   - name: ENABLE_MULTI_GPU
+    description: Enable multi-GPU processing if available
     default: "true"
   - name: GPU_MEMORY_FRACTION
+    description: Fraction of GPU memory to use
     default: "0.9"
+  - name: DALI_ENABLED
+    description: Enable NVIDIA DALI for accelerated data loading
+    default: "true"
+  - name: USE_TRANSFORMER_ENGINE
+    description: Enable NVIDIA Transformer Engine optimizations
+    default: "true"
+  - name: NVTX_PROFILING_ENABLED
+    description: Enable NVTX profiling markers
+    default: "true"
   
   # API Configuration
   - name: PORT
+    description: API port
     default: "8000"
   - name: LOG_LEVEL
+    description: Logging verbosity
     default: "INFO"
   - name: ENABLE_CORS
+    description: Enable CORS for API requests
     default: "true"
   - name: CORS_ORIGINS
-    default: "*"
+    description: Allowed CORS origins (comma-separated list)
+    default: "https://example.com,http://localhost:3000"
   - name: JWT_SECRET
-    default: "sap-hana-langchain-integration-secret-key"
+    description: JWT authentication secret key
+    required: true
     secret: true
 
 # Service definitions
@@ -97,12 +188,48 @@ services:
     volumes:
       - name: trt-engines
         mountPath: /app/trt_engines
+      - name: model-repository
+        mountPath: /app/models
+      - name: calibration-cache
+        mountPath: /app/calibration_cache
       - name: api-data
         mountPath: /app/data
       - name: api-logs
         mountPath: /app/logs
     resources:
       gpu: true
+    env:
+      - name: SECURITY_ENABLED
+        value: "true"
+    security_context:
+      run_as_non_root: true
+      read_only_root_filesystem: false
+    replicas: 2
+    autoscaling:
+      min_replicas: 2
+      max_replicas: 5
+      metrics:
+        - name: cpu
+          target: 80
+  
+  - name: triton-server
+    type: service
+    image: nvcr.io/nvidia/tritonserver:22.12-py3
+    ports:
+      - "8001:8001"
+      - "8002:8002"
+    command: ["tritonserver", "--model-repository=/models", "--strict-model-config=false", "--log-verbose=1"]
+    volumes:
+      - name: model-repository
+        mountPath: /models
+    resources:
+      gpu: true
+    healthcheck:
+      path: /v2/health/ready
+      port: 8001
+      interval: 30s
+      timeout: 10s
+      retries: 3
   
   - name: frontend
     type: web
@@ -124,15 +251,56 @@ services:
         value: "true"
       - name: VITE_ENABLE_ACCESSIBILITY
         value: "true"
+    security_context:
+      run_as_non_root: true
+      read_only_root_filesystem: true
+
+  - name: dcgm-exporter
+    type: service
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:2.4.6-2.6.10-ubuntu20.04
+    ports:
+      - "9400:9400"
+    volumes:
+      - name: dcgm-config
+        mountPath: /etc/dcgm-exporter
+    command: ["dcgm-exporter", "-f", "/etc/dcgm-exporter/default-counters.csv"]
+
+  - name: prometheus
+    type: service
+    image: prom/prometheus:v2.40.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - name: prometheus-config
+        mountPath: /etc/prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    depends_on:
+      - dcgm-exporter
+      - api
 
 # Persistent volumes
 volumes:
   - name: trt-engines
     size: 5Gi
+    persistent: true
+  - name: model-repository
+    size: 10Gi
+    persistent: true
+  - name: calibration-cache
+    size: 2Gi
+    persistent: true
   - name: api-data
     size: 10Gi
+    persistent: true
   - name: api-logs
     size: 2Gi
+    persistent: true
+  - name: dcgm-config
+    size: 1Gi
+    persistent: true
+  - name: prometheus-config
+    size: 1Gi
+    persistent: true
 
 # Expose endpoints
 endpoints:
@@ -147,6 +315,18 @@ endpoints:
     port: 3000
     path: /
     public: true
+  
+  - name: prometheus
+    service: prometheus
+    port: 9090
+    path: /
+    public: true
+  
+  - name: dcgm-metrics
+    service: dcgm-exporter
+    port: 9400
+    path: /metrics
+    public: false
 
 # Post-deployment checks
 checks:
@@ -159,6 +339,26 @@ checks:
     command: curl -f http://localhost:8000/gpu/info
     timeout: 10s
     retries: 3
+  
+  - name: Triton Server health check
+    command: curl -f http://localhost:8001/v2/health/ready
+    timeout: 10s
+    retries: 3
+  
+  - name: DCGM metrics check
+    command: curl -f http://localhost:9400/metrics | grep -q DCGM_FI_DEV_GPU_UTIL
+    timeout: 10s
+    retries: 3
+  
+  - name: Security scan
+    command: trivy image --severity HIGH,CRITICAL --exit-code 1 ${SERVICE_IMAGE}
+    on: pre-deploy
+    timeout: 300s
+  
+  - name: Python dependency security check
+    command: safety check -r requirements.txt
+    on: pre-deploy
+    timeout: 60s
 
 # Documentation and metadata for the blueprint
 metadata:
@@ -169,6 +369,7 @@ metadata:
     - vectorstore
     - gpu
     - tensorrt
+    - nvidia
   documentation:
     usage: |
       # SAP HANA Cloud LangChain Integration with NVIDIA GPU Acceleration
@@ -178,17 +379,40 @@ metadata:
       ## Features
       
       - TensorRT-optimized embedding generation
-      - Multi-GPU support
-      - Vector similarity search
-      - Context-aware error handling
-      - Web UI for visualization
+      - Multi-GPU support with dynamic load balancing
+      - NVIDIA Triton Server for scalable inference
+      - DCGM monitoring for GPU performance tracking
+      - Comprehensive security measures
+      - Prometheus-based metrics and monitoring
       
       ## Getting Started
       
       1. Deploy the blueprint with your SAP HANA Cloud credentials
-      2. Access the API at the public endpoint
-      3. Access the frontend at the public endpoint
+      2. Access the API at the public endpoint: http://<deployment-url>:8000
+      3. Access the frontend at the public endpoint: http://<deployment-url>:3000
+      4. Monitor GPU performance with Prometheus: http://<deployment-url>:9090
+      
+      ## Security Considerations
+      
+      - JWT authentication is required for API access
+      - Container security scanning is performed during deployment
+      - Services run as non-root users when possible
+      - CORS is restricted to specified origins
+      
+      ## Performance Optimization
+      
+      - TensorRT engines are calibrated and cached for optimal performance
+      - NVIDIA DALI accelerates data loading operations
+      - Dynamic batch sizing based on GPU memory availability
+      - Multi-GPU support distributes workload across available GPUs
       
       ## API Documentation
       
       The API documentation is available at `/docs` on the API endpoint.
+      
+      ## Monitoring
+      
+      - GPU metrics: http://<deployment-url>:9400/metrics
+      - Prometheus: http://<deployment-url>:9090
+      - API health: http://<deployment-url>:8000/health/ping
+      - Triton metrics: http://<deployment-url>:8002/metrics

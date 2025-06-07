@@ -1,68 +1,79 @@
-# SAP HANA Cloud LangChain Integration for NVIDIA Brev LaunchPad
+# SAP HANA Cloud LangChain Integration with NVIDIA GPU Acceleration
 
-This blueprint deploys a GPU-accelerated vector search service for SAP HANA Cloud integration using NVIDIA GPUs on Brev LaunchPad.
+This Brev LaunchPad configuration deploys a GPU-accelerated vector search service for SAP HANA Cloud integration.
 
 ## Features
 
-- **TensorRT-optimized embedding generation**: Leverage NVIDIA TensorRT for up to 5x faster embedding generation
-- **Multi-GPU support**: Scale across multiple GPUs for higher throughput
-- **Precision controls**: FP32, FP16, and INT8 precision options for optimal performance/accuracy tradeoffs
-- **Dynamic batch sizing**: Automatically adjust batch sizes based on available GPU memory
-- **SAP HANA Cloud integration**: Connect directly to your SAP HANA Cloud instance
-- **Vector similarity search**: Fast semantic search using cosine similarity
-- **Web UI**: Visualization interface for exploring vector embeddings
+- TensorRT-optimized embedding generation
+- Multi-GPU support with dynamic load balancing
+- NVIDIA Triton Server for scalable inference
+- DCGM monitoring for GPU performance tracking
+- Comprehensive security measures
+- Prometheus-based metrics and monitoring
 
-## Requirements
+## Getting Started
 
-- SAP HANA Cloud instance with credentials
-- NVIDIA GPU (T4 or better recommended)
-- Brev LaunchPad account
+1. Deploy the blueprint with your SAP HANA Cloud credentials
+2. Access the API at the public endpoint: `http://<deployment-url>:8000`
+3. Access the frontend at the public endpoint: `http://<deployment-url>:3000`
+4. Monitor GPU performance with Prometheus: `http://<deployment-url>:9090`
 
-## Quick Start
+## Security Considerations
 
-1. Deploy this blueprint on Brev LaunchPad
-2. Configure the required environment variables:
-   - `HANA_HOST`: Your SAP HANA Cloud host
-   - `HANA_PORT`: Your SAP HANA Cloud port (usually 443)
-   - `HANA_USER`: Your SAP HANA Cloud username
-   - `HANA_PASSWORD`: Your SAP HANA Cloud password
-3. Access the API at the provided endpoint
-4. Access the frontend at the provided endpoint
+- JWT authentication is required for API access
+- Container security scanning is performed during deployment
+- Services run as non-root users when possible
+- CORS is restricted to specified origins
 
-## Configuration Options
+## Performance Optimization
 
-### GPU Acceleration
+- TensorRT engines are calibrated and cached for optimal performance
+- NVIDIA DALI accelerates data loading operations
+- Dynamic batch sizing based on GPU memory availability
+- Multi-GPU support distributes workload across available GPUs
 
-- `GPU_ENABLED`: Enable GPU acceleration (default: true)
-- `USE_TENSORRT`: Enable TensorRT optimization (default: true)
-- `TENSORRT_PRECISION`: Precision for TensorRT (fp32, fp16, int8) (default: fp16)
-- `BATCH_SIZE`: Initial batch size for embedding generation (default: 32)
-- `MAX_BATCH_SIZE`: Maximum batch size (default: 128)
-- `ENABLE_MULTI_GPU`: Enable multi-GPU support (default: true)
-- `GPU_MEMORY_FRACTION`: Fraction of GPU memory to use (default: 0.9)
+## API Documentation
 
-### SAP HANA Cloud
+The API documentation is available at `/docs` on the API endpoint.
 
-- `DEFAULT_TABLE_NAME`: Default table for vector store (default: EMBEDDINGS)
-- `DB_MAX_CONNECTIONS`: Maximum database connections (default: 5)
-- `DB_CONNECTION_TIMEOUT`: Connection timeout in seconds (default: 600)
+## Monitoring
 
-## API Endpoints
+- GPU metrics: `http://<deployment-url>:9400/metrics`
+- Prometheus: `http://<deployment-url>:9090`
+- API health: `http://<deployment-url>:8000/health/ping`
+- Triton metrics: `http://<deployment-url>:8002/metrics`
 
-- `/docs`: API documentation (Swagger UI)
-- `/health/ping`: Health check endpoint
-- `/gpu/info`: GPU information endpoint
-- `/embeddings`: Generate embeddings
-- `/texts`: Add texts to vector store
-- `/query`: Query the vector store
-- `/query/mmr`: Query with Maximal Marginal Relevance
+## Environment Variables
 
-## Troubleshooting
+| Variable | Description | Default | Required |
+| --- | --- | --- | --- |
+| HANA_HOST | SAP HANA Cloud host | - | Yes |
+| HANA_PORT | SAP HANA Cloud port | 443 | No |
+| HANA_USER | SAP HANA Cloud username | - | Yes |
+| HANA_PASSWORD | SAP HANA Cloud password | - | Yes |
+| JWT_SECRET | JWT authentication secret key | - | Yes |
+| GPU_ENABLED | Enable GPU acceleration | true | No |
+| USE_TENSORRT | Enable TensorRT optimization | true | No |
+| TENSORRT_PRECISION | TensorRT precision (fp32, fp16, int8) | fp16 | No |
+| BATCH_SIZE | Default batch size | 32 | No |
+| MAX_BATCH_SIZE | Maximum batch size | 128 | No |
+| ENABLE_MULTI_GPU | Enable multi-GPU processing | true | No |
+| DALI_ENABLED | Enable NVIDIA DALI for data loading | true | No |
+| USE_TRANSFORMER_ENGINE | Enable Transformer Engine | true | No |
 
-- **GPU not detected**: Ensure the Brev LaunchPad environment has GPU support
-- **Connection errors**: Check your SAP HANA Cloud credentials
-- **Performance issues**: Try adjusting batch size and precision settings
+## Services
 
-## Support
+- **API**: LangChain integration API service
+- **Frontend**: Web interface for API interaction
+- **Triton Server**: NVIDIA Triton Inference Server
+- **DCGM Exporter**: GPU metrics exporter
+- **Prometheus**: Metrics collection and monitoring
 
-For issues or questions, please open an issue on the [GitHub repository](https://github.com/plturrell/finsightutils_langchain_for_sap_hana_cloud).
+## Repository Structure
+
+- **api/**: API source code
+- **frontend/**: Frontend source code
+- **langchain_hana/**: LangChain integration library
+- **scripts/**: Utility scripts
+- **docker/**: Docker configuration files
+EOF < /dev/null
