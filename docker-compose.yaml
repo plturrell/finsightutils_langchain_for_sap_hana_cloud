@@ -2,16 +2,12 @@ version: '3.8'
 
 services:
   api:
-    image: python:3.10-slim
+    build: .
+    image: local-sap-hana-api:latest
     ports:
       - "8000:8000"
     environment:
       - TEST_MODE=true
-    volumes:
-      - ./api:/app
-    working_dir: /app
-    command: >
-      bash -c "pip install fastapi uvicorn && 
-               echo 'from fastapi import FastAPI; app = FastAPI(); @app.get(\"/\"); def root(): return {\"message\": \"Hello World\"}; @app.get(\"/health\"); def health(): return {\"status\": \"ok\"}' > app.py && 
-               python -m uvicorn app:app --host 0.0.0.0 --port 8000"
+      - ENABLE_CORS=true
+      - LOG_LEVEL=INFO
     restart: unless-stopped
