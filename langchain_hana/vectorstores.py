@@ -47,6 +47,8 @@ from langchain_hana.query_constructors import (
     CreateWhereClause,
 )
 from langchain_hana.utils import DistanceStrategy
+from langchain_hana.lineage import LineageManager, track_lineage
+from langchain_hana.audit import AuditLogger, AuditCategory, LogLevel, audit_log
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +94,15 @@ class HanaDB(VectorStore):
         vector_column_type: str = default_vector_column_type,
         *,
         specific_metadata_columns: Optional[list[str]] = None,
+        enable_lineage: bool = False,
+        enable_audit_logging: bool = False,
+        audit_log_file: Optional[str] = None,
+        audit_log_to_database: bool = False,
+        audit_log_to_console: bool = False,
+        current_user_id: Optional[str] = None,
+        current_application: Optional[str] = None,
+        client_ip: Optional[str] = None,
+        request_id: Optional[str] = None,
     ):
         valid_distance = False
         for key in HANA_DISTANCE_FUNCTION.keys():
@@ -129,6 +140,37 @@ class HanaDB(VectorStore):
 
         # Initialize the table if it doesn't exist
         self._initialize_table()
+        
+        # Initialize lineage tracking if enabled
+        self.lineage_manager = None
+        if enable_lineage:
+            try:
+                self.lineage_manager = LineageManager(connection)
+                logger.info("Data lineage tracking enabled")
+            except Exception as e:
+                logger.warning(f"Failed to initialize lineage tracking: {str(e)}")
+        
+        # Initialize audit logging if enabled
+        self.audit_logger = None
+        if enable_audit_logging:
+            try:
+                self.audit_logger = AuditLogger(
+                    connection=connection,
+                    log_file=audit_log_file,
+                    log_to_database=audit_log_to_database,
+                    log_to_console=audit_log_to_console,
+                    application_name=current_application or "langchain_hana",
+                    source_name="vectorstore"
+                )
+                logger.info("Audit logging enabled")
+            except Exception as e:
+                logger.warning(f"Failed to initialize audit logging: {str(e)}")
+        
+        # Store context information for lineage tracking and audit logging
+        self.current_user_id = current_user_id
+        self.current_application = current_application
+        self.client_ip = client_ip
+        self.request_id = request_id
 
     def set_embedding(self, embedding: Embeddings) -> None:
         """
@@ -183,6 +225,50 @@ class HanaDB(VectorStore):
             self.use_internal_embeddings = False
             self.internal_embedding_model_id = ""
 
+    def _get_embedding_dimension(self) -> int:
+        """
+        Get the dimension of embeddings used by this vectorstore.
+        
+        This method determines the embedding dimension based on either the vector_column_length
+        if specified, or by generating a sample embedding if not explicitly set.
+        
+        Returns:
+            int: The dimension of the embedding vectors
+        """
+        # If vector column length is explicitly set, use that
+        if self.vector_column_length and self.vector_column_length > 0:
+            return self.vector_column_length
+            
+        # Otherwise, try to determine it from the embedding model
+        try:
+            if self.use_internal_embeddings:
+                # For internal embeddings, query the model capabilities
+                cursor = self.connection.cursor()
+                try:
+                    # Simple query to get vector dimension from a sample embedding
+                    cursor.execute(
+                        "SELECT LENGTH(VECTOR_EMBEDDING('test', 'QUERY', :model_id)) FROM sys.DUMMY",
+                        model_id=self.internal_embedding_model_id
+                    )
+                    if cursor.has_result_set():
+                        row = cursor.fetchone()
+                        # Convert bytes to vector length (subtract 4 bytes for the header)
+                        if row and row[0]:
+                            # The first 4 bytes contain the vector dimension
+                            dim_bytes = row[0][:4]
+                            dimension = int.from_bytes(dim_bytes, byteorder='little')
+                            return dimension
+                finally:
+                    cursor.close()
+            else:
+                # For external embeddings, generate a sample embedding
+                sample_embedding = self.embedding.embed_query("test")
+                return len(sample_embedding)
+        except Exception as e:
+            logger.warning(f"Failed to determine embedding dimension: {str(e)}")
+            # Default to a common dimension size as fallback
+            return 768
+    
     def _initialize_table(self) -> None:
         """Create the table if it doesn't exist and validate columns."""
         if not self._table_exists(self.table_name):
@@ -664,11 +750,19 @@ class HanaDB(VectorStore):
                 ) from e
             raise
 
+    @track_lineage
+    @audit_log(
+        action="ADD_TEXTS", 
+        category=AuditCategory.DATA_MODIFICATION,
+        resource_type="VECTOR_TABLE",
+        message_template="Add texts to vector store"
+    )
     def add_texts(  # type: ignore[override]
         self,
         texts: Iterable[str],
         metadatas: Optional[list[dict]] = None,
         embeddings: Optional[list[list[float]]] = None,
+        ids: Optional[list[str]] = None,
         **kwargs: Any,
     ) -> list[str]:
         """Add texts to the vectorstore.
@@ -679,10 +773,27 @@ class HanaDB(VectorStore):
                 Defaults to None.
             embeddings (Optional[list[list[float]]], optional): Optional pre-generated
                 embeddings. Defaults to None.
+            ids (Optional[list[str]], optional): Optional list of IDs for the documents.
+                Not used directly but passed to track lineage. Defaults to None.
 
         Returns:
             list[str]: empty list
         """
+        # Log embedding generation event if audit logger is available
+        if self.audit_logger:
+            text_list = list(texts)
+            embedding_model = self.embedding.__class__.__name__
+            
+            if self.use_internal_embeddings:
+                embedding_model = f"HANA_INTERNAL ({self.internal_embedding_model_id})"
+                
+            self.audit_logger.log_embedding_generation(
+                user_id=self.current_user_id,
+                model=embedding_model,
+                num_documents=len(text_list),
+                client_ip=self.client_ip,
+                request_id=self.request_id
+            )
 
         # decide how to add texts
         # using external embedding instance or internal embedding function of HanaDB
@@ -949,6 +1060,13 @@ class HanaDB(VectorStore):
         instance.add_texts(texts, metadatas)
         return instance
 
+    @track_lineage
+    @audit_log(
+        action="SEARCH", 
+        category=AuditCategory.VECTOR_SEARCH,
+        resource_type="VECTOR_TABLE",
+        message_template="Vector similarity search"
+    )
     def similarity_search(  # type: ignore[override]
         self, query: str, k: int = 4, filter: Optional[dict] = None
     ) -> list[Document]:
@@ -963,11 +1081,29 @@ class HanaDB(VectorStore):
         Returns:
             List of Documents most similar to the query
         """
+        start_time = time.time()
+        
         docs_and_scores = self.similarity_search_with_score(
             query=query, k=k, filter=filter
         )
+        
+        # Log vector search event if audit logger is available
+        if self.audit_logger:
+            execution_time = time.time() - start_time
+            self.audit_logger.log_vector_search(
+                user_id=self.current_user_id,
+                query=query,
+                table_name=self.table_name,
+                num_results=len(docs_and_scores),
+                filter=filter,
+                client_ip=self.client_ip,
+                request_id=self.request_id,
+                execution_time=execution_time
+            )
+            
         return [doc for doc, _ in docs_and_scores]
 
+    @track_lineage
     def similarity_search_with_score(
         self, query: str, k: int = 4, filter: Optional[dict] = None
     ) -> list[tuple[Document, float]]:
@@ -1367,6 +1503,427 @@ class HanaDB(VectorStore):
             False otherwise, None if not implemented.
         """
         return await run_in_executor(None, self.delete, ids=ids, filter=filter)
+        
+    @track_lineage
+    @audit_log(
+        action="UPSERT_TEXTS", 
+        category=AuditCategory.DATA_MODIFICATION,
+        resource_type="VECTOR_TABLE",
+        message_template="Upsert texts in vector store"
+    )
+    def upsert_texts(
+        self,
+        texts: Iterable[str],
+        metadatas: Optional[list[dict]] = None,
+        filter: Optional[dict] = None,
+        embeddings: Optional[list[list[float]]] = None,
+        **kwargs: Any,
+    ) -> list[str]:
+        """Add or update texts in the vectorstore.
+        
+        This method first checks if documents matching the filter exist:
+        - If they exist, it updates them with the new content and metadata
+        - If they don't exist, it adds the documents as new entries
+        
+        Args:
+            texts: Iterable of strings to add/update in the vectorstore
+            metadatas: Optional list of metadata dictionaries
+            filter: Filter criteria to identify existing documents to update
+                    If None, documents will be added as new entries
+            embeddings: Optional pre-generated embeddings
+            
+        Returns:
+            list[str]: empty list (for compatibility with add_texts)
+            
+        Note:
+            This provides an "upsert" operation (update if exists, insert if not)
+            which is useful for incrementally updating a document collection
+            without needing to track what already exists.
+        """
+        # If no filter is provided, just add as new documents
+        if filter is None:
+            return self.add_texts(
+                texts=texts,
+                metadatas=metadatas,
+                embeddings=embeddings,
+                **kwargs
+            )
+            
+        # Check if documents matching the filter exist
+        where_clause, parameters = CreateWhereClause(self)(filter)
+        sql_str = f'SELECT COUNT(*) FROM "{self.table_name}" {where_clause}'
+        
+        cur = self.connection.cursor()
+        try:
+            cur.execute(sql_str, parameters)
+            count = cur.fetchone()[0]
+        finally:
+            cur.close()
+            
+        # If matching documents exist, update them
+        if count > 0:
+            self.update_texts(
+                texts=texts,
+                filter=filter,
+                metadatas=metadatas,
+                embeddings=embeddings,
+                **kwargs
+            )
+        # Otherwise, add as new documents
+        else:
+            self.add_texts(
+                texts=texts,
+                metadatas=metadatas,
+                embeddings=embeddings,
+                **kwargs
+            )
+            
+        return []
+            
+    async def aupsert_texts(
+        self,
+        texts: Iterable[str],
+        metadatas: Optional[list[dict]] = None,
+        filter: Optional[dict] = None,
+        embeddings: Optional[list[list[float]]] = None,
+        **kwargs: Any,
+    ) -> list[str]:
+        """Asynchronously add or update texts in the vectorstore.
+        
+        Args:
+            texts: Iterable of strings to add/update in the vectorstore
+            metadatas: Optional list of metadata dictionaries
+            filter: Filter criteria to identify existing documents to update
+            embeddings: Optional pre-generated embeddings
+            
+        Returns:
+            list[str]: empty list (for compatibility with add_texts)
+        """
+        return await run_in_executor(
+            None, 
+            self.upsert_texts, 
+            texts=texts, 
+            metadatas=metadatas,
+            filter=filter, 
+            embeddings=embeddings,
+            **kwargs
+        )
+
+    @track_lineage
+    @audit_log(
+        action="UPDATE_TEXTS", 
+        category=AuditCategory.DATA_MODIFICATION,
+        resource_type="VECTOR_TABLE",
+        message_template="Update texts in vector store"
+    )
+    def update_texts(
+        self,
+        texts: Iterable[str],
+        filter: dict,
+        metadatas: Optional[list[dict]] = None,
+        embeddings: Optional[list[list[float]]] = None,
+        update_embeddings: bool = True,
+        **kwargs: Any,
+    ) -> bool:
+        """Update texts in the vector store that match the filter criteria.
+        
+        This method updates the content and/or metadata of documents that match
+        the specified filter. It can also regenerate embeddings if required.
+        
+        Args:
+            texts: Iterable of strings to update in the vectorstore.
+            filter: Filter criteria to identify which documents to update.
+                    An empty filter ({}) will update ALL documents in the table.
+            metadatas: Optional list of metadata dictionaries to update.
+            embeddings: Optional pre-generated embeddings to use.
+            update_embeddings: Whether to update embedding vectors (default: True).
+                               If False, only text content and metadata are updated.
+            
+        Returns:
+            bool: True if update was successful, False otherwise
+        
+        Note:
+            This is a "bulk update" operation that will modify all documents
+            matching the filter. If you need to update specific documents,
+            use a precise filter that uniquely identifies those documents.
+        """
+        # Log update event if audit logger is available
+        if self.audit_logger:
+            text_list = list(texts)
+            embedding_model = self.embedding.__class__.__name__
+            
+            if self.use_internal_embeddings:
+                embedding_model = f"HANA_INTERNAL ({self.internal_embedding_model_id})"
+                
+            self.audit_logger.log_document_update(
+                user_id=self.current_user_id,
+                model=embedding_model,
+                num_documents=len(text_list),
+                client_ip=self.client_ip,
+                request_id=self.request_id
+            )
+            
+        try:
+            # Convert texts to list for proper indexing
+            text_list = list(texts)
+            
+            # Validate input parameters
+            if len(text_list) == 0:
+                logger.warning("No texts provided for update operation")
+                return False
+                
+            if not filter:
+                logger.warning("Empty filter provided for update operation - all documents will be updated")
+                
+            # First identify the documents that match the filter
+            where_clause, parameters = CreateWhereClause(self)(filter)
+            
+            # For each document matching the filter, update text, metadata, and embeddings
+            if update_embeddings:
+                if self.use_internal_embeddings:
+                    return self._update_texts_using_internal_embedding(
+                        text_list[0], 
+                        where_clause, 
+                        parameters,
+                        metadatas[0] if metadatas else None,
+                    )
+                else:
+                    return self._update_texts_using_external_embedding(
+                        text_list[0], 
+                        where_clause, 
+                        parameters,
+                        metadatas[0] if metadatas else None,
+                        embeddings[0] if embeddings else None,
+                    )
+            else:
+                # Update text and metadata only, without regenerating embeddings
+                return self._update_texts_without_embeddings(
+                    text_list[0],
+                    where_clause,
+                    parameters,
+                    metadatas[0] if metadatas else None,
+                )
+                
+        except Exception as e:
+            logger.error(f"Error updating texts: {str(e)}")
+            raise ValueError(f"Error updating texts: {str(e)}") from e
+            
+    def _update_texts_using_internal_embedding(
+        self,
+        text: str,
+        where_clause: str,
+        parameters: list,
+        metadata: Optional[dict] = None,
+    ) -> bool:
+        """Update texts using SAP HANA's internal embedding function."""
+        try:
+            # Prepare metadata JSON if provided
+            metadata_param = None
+            if metadata is not None:
+                metadata_param = json.dumps(HanaDB._sanitize_metadata_keys(metadata))
+                
+            # Construct the SQL update statement
+            if metadata_param:
+                # Update both text and metadata
+                sql_str = f'''
+                UPDATE "{self.table_name}" 
+                SET 
+                    "{self.content_column}" = ?, 
+                    "{self.metadata_column}" = ?,
+                    "{self.vector_column}" = VECTOR_EMBEDDING(?, 'QUERY', ?)
+                {where_clause}
+                '''
+                all_params = [text, metadata_param, text, self.internal_embedding_model_id] + parameters
+            else:
+                # Update only text
+                sql_str = f'''
+                UPDATE "{self.table_name}" 
+                SET 
+                    "{self.content_column}" = ?, 
+                    "{self.vector_column}" = VECTOR_EMBEDDING(?, 'QUERY', ?)
+                {where_clause}
+                '''
+                all_params = [text, text, self.internal_embedding_model_id] + parameters
+                
+            # Execute update
+            cur = self.connection.cursor()
+            try:
+                cur.execute(sql_str, all_params)
+                rows_affected = cur.rowcount
+                self.connection.commit()
+                logger.info(f"Updated {rows_affected} documents with internal embeddings")
+                return True
+            except dbapi.Error as e:
+                self.connection.rollback()
+                additional_context = {
+                    "table_name": self.table_name,
+                    "operation": "update_with_internal_embedding"
+                }
+                handle_database_error(e, "update_texts", additional_context)
+                return False
+            finally:
+                cur.close()
+                
+        except Exception as e:
+            logger.error(f"Error updating texts with internal embedding: {str(e)}")
+            return False
+            
+    def _update_texts_using_external_embedding(
+        self,
+        text: str,
+        where_clause: str,
+        parameters: list,
+        metadata: Optional[dict] = None,
+        embedding: Optional[list[float]] = None,
+    ) -> bool:
+        """Update texts using external embedding model."""
+        try:
+            # Generate embedding if not provided
+            if embedding is None:
+                embedding = self.embedding.embed_query(text)
+                
+            # Prepare metadata JSON if provided
+            metadata_param = None
+            if metadata is not None:
+                metadata_param = json.dumps(HanaDB._sanitize_metadata_keys(metadata))
+                
+            # Convert embedding to binary format
+            vector_binary = self._serialize_binary_format(embedding)
+            
+            # Construct the SQL update statement
+            if metadata_param:
+                # Update text, metadata and vector
+                sql_str = f'''
+                UPDATE "{self.table_name}" 
+                SET 
+                    "{self.content_column}" = ?, 
+                    "{self.metadata_column}" = ?,
+                    "{self.vector_column}" = ?
+                {where_clause}
+                '''
+                all_params = [text, metadata_param, vector_binary] + parameters
+            else:
+                # Update only text and vector
+                sql_str = f'''
+                UPDATE "{self.table_name}" 
+                SET 
+                    "{self.content_column}" = ?, 
+                    "{self.vector_column}" = ?
+                {where_clause}
+                '''
+                all_params = [text, vector_binary] + parameters
+                
+            # Execute update
+            cur = self.connection.cursor()
+            try:
+                cur.execute(sql_str, all_params)
+                rows_affected = cur.rowcount
+                self.connection.commit()
+                logger.info(f"Updated {rows_affected} documents with external embeddings")
+                return True
+            except dbapi.Error as e:
+                self.connection.rollback()
+                additional_context = {
+                    "table_name": self.table_name,
+                    "operation": "update_with_external_embedding"
+                }
+                handle_database_error(e, "update_texts", additional_context)
+                return False
+            finally:
+                cur.close()
+                
+        except Exception as e:
+            logger.error(f"Error updating texts with external embedding: {str(e)}")
+            return False
+            
+    def _update_texts_without_embeddings(
+        self,
+        text: str,
+        where_clause: str,
+        parameters: list,
+        metadata: Optional[dict] = None,
+    ) -> bool:
+        """Update text and/or metadata without regenerating embeddings."""
+        try:
+            # Prepare metadata JSON if provided
+            metadata_param = None
+            if metadata is not None:
+                metadata_param = json.dumps(HanaDB._sanitize_metadata_keys(metadata))
+                
+            # Construct the SQL update statement
+            if metadata_param:
+                # Update both text and metadata
+                sql_str = f'''
+                UPDATE "{self.table_name}" 
+                SET 
+                    "{self.content_column}" = ?, 
+                    "{self.metadata_column}" = ?
+                {where_clause}
+                '''
+                all_params = [text, metadata_param] + parameters
+            else:
+                # Update only text
+                sql_str = f'''
+                UPDATE "{self.table_name}" 
+                SET "{self.content_column}" = ?
+                {where_clause}
+                '''
+                all_params = [text] + parameters
+                
+            # Execute update
+            cur = self.connection.cursor()
+            try:
+                cur.execute(sql_str, all_params)
+                rows_affected = cur.rowcount
+                self.connection.commit()
+                logger.info(f"Updated {rows_affected} documents without regenerating embeddings")
+                return True
+            except dbapi.Error as e:
+                self.connection.rollback()
+                additional_context = {
+                    "table_name": self.table_name,
+                    "operation": "update_without_embeddings"
+                }
+                handle_database_error(e, "update_texts", additional_context)
+                return False
+            finally:
+                cur.close()
+                
+        except Exception as e:
+            logger.error(f"Error updating texts without embeddings: {str(e)}")
+            return False
+            
+    async def aupdate_texts(
+        self,
+        texts: Iterable[str],
+        filter: dict,
+        metadatas: Optional[list[dict]] = None,
+        embeddings: Optional[list[list[float]]] = None,
+        update_embeddings: bool = True,
+        **kwargs: Any,
+    ) -> bool:
+        """Asynchronously update texts in the vector store.
+        
+        Args:
+            texts: Iterable of strings to update in the vectorstore.
+            filter: Filter criteria to identify which documents to update.
+            metadatas: Optional list of metadata dictionaries to update.
+            embeddings: Optional pre-generated embeddings to use.
+            update_embeddings: Whether to update embedding vectors.
+            
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        return await run_in_executor(
+            None, 
+            self.update_texts, 
+            texts=texts, 
+            filter=filter,
+            metadatas=metadatas, 
+            embeddings=embeddings,
+            update_embeddings=update_embeddings,
+            **kwargs
+        )
 
     def _embed_query_hana_internal(self, query: str) -> list[float]:
         """
@@ -1429,6 +1986,13 @@ class HanaDB(VectorStore):
         finally:
             cur.close()
 
+    @track_lineage
+    @audit_log(
+        action="MMR_SEARCH", 
+        category=AuditCategory.VECTOR_SEARCH,
+        resource_type="VECTOR_TABLE",
+        message_template="Maximal marginal relevance search"
+    )
     def max_marginal_relevance_search(  # type: ignore[override]
         self,
         query: str,
@@ -1458,18 +2022,39 @@ class HanaDB(VectorStore):
         Returns:
             List of Documents selected by maximal marginal relevance.
         """
+        start_time = time.time()
+        
         if not self.use_internal_embeddings:
             embedding = self.embedding.embed_query(query)
         else:  # generates embedding using the internal embedding function of HanaDb
             embedding = self._embed_query_hana_internal(query)
 
-        return self.max_marginal_relevance_search_by_vector(
+        results = self.max_marginal_relevance_search_by_vector(
             embedding=embedding,
             k=k,
             fetch_k=fetch_k,
             lambda_mult=lambda_mult,
             filter=filter,
         )
+        
+        # Log MMR search event if audit logger is available
+        if self.audit_logger:
+            execution_time = time.time() - start_time
+            self.audit_logger.log_vector_search(
+                user_id=self.current_user_id,
+                query=query,
+                table_name=self.table_name,
+                num_results=len(results),
+                filter=filter,
+                client_ip=self.client_ip,
+                request_id=self.request_id,
+                execution_time=execution_time,
+                search_type="MMR",
+                lambda_mult=lambda_mult,
+                fetch_k=fetch_k
+            )
+            
+        return results
 
     def _parse_float_array_from_string(array_as_string: str) -> list[float]:  # type: ignore[misc]
         array_wo_brackets = array_as_string[1:-1]

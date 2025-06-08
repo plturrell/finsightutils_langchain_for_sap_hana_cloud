@@ -5,7 +5,10 @@ This module provides FastAPI route definitions.
 """
 
 # Import route definitions here
+from .optimization import router as optimization_router
+from .update import router as update_router
 
 __all__ = [
-    # Route components
+    "optimization_router",
+    "update_router"
 ]

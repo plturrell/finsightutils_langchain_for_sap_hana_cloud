@@ -15,6 +15,7 @@ This project provides an enhanced integration between [LangChain](https://github
 - **Knowledge Graph Integration**: Leverage HANA's graph capabilities
 - **Schema Configuration**: Customize database schema and table structure
 - **Metadata Filtering**: Filter vector searches based on metadata
+- **Complete CRUD Operations**: Create, Read, Update, Delete, and Upsert functionality
 
 ### Enhanced Extensions
 - **NVIDIA GPU Acceleration**: Optimized for T4, A10, A100, and H100 GPUs
@@ -203,6 +204,7 @@ See [Testing Guide](docs/testing_api_endpoints.md) for more details on the testi
   - [NVIDIA Deployment](docs/deployment/nvidia.md)
   - [NVIDIA T4 with Vercel](docs/deployment/nvidia-t4-vercel.md)
   - [NGC Blueprint](docs/deployment/ngc-blueprint.md)
+  - [Update Operations Guide](docs/deployment/update-operations.md)
 - [Development Guides](docs/development/)
   - [Configuration Guide](docs/development/configuration.md)
   - [GitHub Synchronization](docs/development/github-sync.md)

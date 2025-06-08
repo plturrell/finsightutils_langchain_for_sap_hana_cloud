@@ -108,6 +108,7 @@ app = FastAPI(
         {"name": "Health", "description": "Health check and monitoring endpoints"},
         {"name": "GPU", "description": "GPU information and acceleration settings"},
         {"name": "General", "description": "General API information endpoints"},
+        {"name": "optimization", "description": "Advanced optimization features including data valuation, interpretable embeddings, hyperparameters, and model compression"},
     ],
     docs_url="/docs",
     redoc_url="/redoc",
@@ -182,7 +183,8 @@ async def root():
             "Context-aware error handling",
             "Vector similarity search",
             "Knowledge graph integration",
-            "GPU acceleration (when available)"
+            "GPU acceleration (when available)",
+            "Advanced optimization with DVRL, NAM, opt_list, and state_of_sparsity"
         ],
         "docs_url": "/docs",
         "redoc_url": "/redoc"
@@ -289,7 +291,11 @@ async def deployment_info():
             "context_aware_errors",
             "precision_similarity_scoring",
             "knowledge_graph_integration",
-            "gpu_acceleration" if torch and torch.cuda.is_available() else "cpu_only"
+            "gpu_acceleration" if torch and torch.cuda.is_available() else "cpu_only",
+            "data_valuation",
+            "interpretable_embeddings",
+            "optimized_hyperparameters",
+            "model_compression"
         ],
         "server_time": time.time(),
         "version": VERSION
@@ -301,11 +307,15 @@ try:
     from api.health import router as health_router
     from api.developer_api import router as developer_router
     from api.benchmark_api import router as benchmark_router
+    from api.routes.optimization import router as optimization_router
+    from api.routes.update import router as update_router
     
     # Include routers
     app.include_router(health_router)
     app.include_router(developer_router)
     app.include_router(benchmark_router)
+    app.include_router(optimization_router)
+    app.include_router(update_router)
     
     # Import vectorstore service
     from api.services import VectorStoreService

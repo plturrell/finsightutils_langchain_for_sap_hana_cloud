@@ -187,3 +187,52 @@ def get_db_connection_context() -> Generator[dbapi.Connection, None, None]:
     finally:
         # We don't close the connection here as it's managed by the pool
         pass
+
+
+def get_vectorstore():
+    """
+    Get a vector store instance with the default configuration.
+    
+    Returns:
+        HanaDB: A configured vector store instance.
+        
+    Raises:
+        HTTPException: If the vector store initialization fails.
+    """
+    from fastapi import HTTPException
+    from langchain_hana import HanaDB
+    from langchain_hana.utils import DistanceStrategy
+    
+    try:
+        # Get database connection
+        connection = get_db_connection()
+        
+        # Get embedding model from configuration
+        from api.services import get_embedding_model
+        embedding_model = get_embedding_model()
+        
+        # Create vector store instance
+        vectorstore = HanaDB(
+            connection=connection,
+            embedding=embedding_model,
+            distance_strategy=DistanceStrategy.COSINE,
+            table_name=config.vector.table_name,
+            enable_lineage=config.vector.enable_lineage,
+            enable_audit_logging=config.vector.enable_audit_logging,
+            audit_log_to_console=True,
+        )
+        
+        return vectorstore
+    except Exception as e:
+        logger.error(f"Error creating vector store: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "vectorstore_initialization_error",
+                "message": f"Failed to initialize vector store: {str(e)}",
+                "context": {
+                    "table_name": config.vector.table_name,
+                    "suggestion": "Check database connection and table configuration"
+                }
+            }
+        )

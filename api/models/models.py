@@ -34,6 +34,38 @@ class AddTextsRequest(BaseModel):
     table_name: Optional[str] = None
 
 
+class UpdateTextsRequest(BaseModel):
+    """Request model for updating texts."""
+    texts: List[str]
+    filter: Dict[str, Any]
+    metadatas: Optional[List[Dict[str, Any]]] = None
+    update_embeddings: bool = True
+    table_name: Optional[str] = None
+
+
+class UpsertTextsRequest(BaseModel):
+    """Request model for upserting texts."""
+    texts: List[str]
+    metadatas: Optional[List[Dict[str, Any]]] = None
+    filter: Optional[Dict[str, Any]] = None
+    table_name: Optional[str] = None
+
+
+class DeleteRequest(BaseModel):
+    """Request model for deleting documents."""
+    filter: Dict[str, Any]
+    table_name: Optional[str] = None
+
+
+class DocumentResponse(BaseModel):
+    """Response model for document operations."""
+    success: bool
+    operation: str
+    count: int = 0
+    message: str
+    processing_time: float
+
+
 class QueryRequest(BaseModel):
     """Request model for querying."""
     query: str
