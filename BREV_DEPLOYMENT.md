@@ -91,23 +91,38 @@ If you encounter issues, follow these steps:
 
 ## Running in Production Mode
 
-To run with an actual SAP HANA Cloud connection:
+After successfully deploying the API in test mode, you can configure it to connect to a real SAP HANA Cloud instance:
 
-1. **Create an environment file**
+1. **Run the configuration script**
 
    ```bash
-   cat > .env << EOF
-   HANA_HOST=your_hana_host.hanacloud.ondemand.com
-   HANA_PORT=443
-   HANA_USER=your_username
-   HANA_PASSWORD=your_password
-   TEST_MODE=false
-   EOF
+   ./configure_hana.sh
    ```
 
-2. **Modify the deployment script**
+   This interactive script will:
+   - Prompt you for SAP HANA Cloud connection details
+   - Create the necessary configuration files (.env and config/connection.json)
+   - Test the connection to verify credentials
+   - Provide instructions for restarting the API with the new configuration
 
-   Edit `brev_deploy.sh` to load credentials from the .env file and set `TEST_MODE=false`.
+2. **Restart the API with the new configuration**
+
+   ```bash
+   # Stop the current API instance
+   pkill -f "uvicorn app:app"
+   
+   # Restart with the new configuration
+   nohup ./brev_deploy.sh > logs/api_$(date +%Y%m%d_%H%M%S).log 2>&1 &
+   ```
+
+3. **Verify the connection**
+
+   ```bash
+   # Check the database connection status
+   curl http://localhost:8000/health/database
+   ```
+
+   You should see a response with "status": "ok" if the connection is successful.
 
 ## Monitoring
 
