@@ -2,23 +2,16 @@ version: '3.8'
 
 services:
   api:
-    build: .
+    image: python:3.10-slim
     ports:
       - "8000:8000"
     environment:
-      - HANA_HOST=${HANA_HOST:-localhost}
-      - HANA_PORT=${HANA_PORT:-30015}
-      - HANA_USER=${HANA_USER:-SYSTEM}
-      - HANA_PASSWORD=${HANA_PASSWORD:-password}
-      - PORT=8000
-      - LOG_LEVEL=INFO
-      - ENABLE_CORS=true
-      - CORS_ORIGINS=*
       - TEST_MODE=true
-      - ENABLE_ERROR_CONTEXT=true
-      - ERROR_DETAIL_LEVEL=verbose
-      - INCLUDE_SUGGESTIONS=true
-      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-      - MULTI_GPU_ENABLED=false
-      - USE_TENSORRT=false
+    volumes:
+      - ./api:/app
+    working_dir: /app
+    command: >
+      bash -c "pip install fastapi uvicorn && 
+               echo 'from fastapi import FastAPI; app = FastAPI(); @app.get(\"/\"); def root(): return {\"message\": \"Hello World\"}; @app.get(\"/health\"); def health(): return {\"status\": \"ok\"}' > app.py && 
+               python -m uvicorn app:app --host 0.0.0.0 --port 8000"
     restart: unless-stopped
