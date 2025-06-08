@@ -1,0 +1,40 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY api/requirements.txt ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy API code
+COPY api /app
+
+# Create cache directories
+RUN mkdir -p /app/cache
+
+# Expose port
+EXPOSE 8000
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV LOG_LEVEL=INFO
+ENV ENABLE_ERROR_CONTEXT=true
+ENV ERROR_DETAIL_LEVEL=verbose
+ENV INCLUDE_SUGGESTIONS=true
+ENV ENABLE_CORS=true
+ENV CORS_ORIGINS=*
+ENV TEST_MODE=true
+ENV MULTI_GPU_ENABLED=false
+ENV USE_TENSORRT=false
+ENV EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+
+# Command to run
+CMD ["python", "-m", "uvicorn", "minimal_test:app", "--host", "0.0.0.0", "--port", "8000"]
