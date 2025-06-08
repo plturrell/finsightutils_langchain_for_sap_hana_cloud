@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  api:
+    build: 
+      context: ./api
+      dockerfile: Dockerfile.ngc
+    image: sap-hana-api:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - HANA_HOST=${HANA_HOST:-localhost}
+      - HANA_PORT=${HANA_PORT:-30015}
+      - HANA_USER=${HANA_USER:-SYSTEM}
+      - HANA_PASSWORD=${HANA_PASSWORD:-password}
+      - DEFAULT_TABLE_NAME=${DEFAULT_TABLE_NAME:-EMBEDDINGS}
+      - PORT=8000
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENABLE_CORS=true
+      - CORS_ORIGINS=*
+      - TEST_MODE=true
+      - GPU_ENABLED=true
+      - USE_TENSORRT=true
+      - TENSORRT_PRECISION=fp16
+      - BATCH_SIZE=32
+      - MAX_BATCH_SIZE=128
+      - ENABLE_MULTI_GPU=true
+    volumes:
+      - trt-engines:/app/trt_engines
+      - api-data:/app/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    image: sap-hana-frontend:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - BACKEND_URL=http://api:8000
+      - VITE_ENABLE_VECTOR_VISUALIZATION=true
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  trt-engines:
+    driver: local
+  api-data:
+    driver: local
