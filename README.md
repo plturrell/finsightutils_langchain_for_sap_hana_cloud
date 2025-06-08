@@ -22,8 +22,19 @@ This project provides an enhanced integration between [LangChain](https://github
 - **Mobile-Responsive Frontend**: Accessibility-focused UI with dark mode
 - **Interactive 3D Vector Visualization**: Explore embeddings visually
 - **Flexible Deployment**: Docker, Kubernetes, Vercel, and NGC Blueprint options
-- **Multi-GPU Support**: Automatic workload distribution across GPUs
+- **Multi-GPU Support**: Automatic workload distribution across GPUs with dynamic load balancing
 - **Context-Aware Error Handling**: Detailed error messages with remediation suggestions
+- **Advanced Optimization Components**:
+  - **Data Valuation (DVRL)**: Identify most valuable documents for retrieval
+  - **Interpretable Embeddings (NAM)**: Understand which features contribute to search results
+  - **Optimized Hyperparameters (opt_list)**: Data-driven learning rates and training schedules
+  - **Model Compression (state_of_sparsity)**: Reduce memory footprint with minimal accuracy loss
+- **Enterprise-Grade Additions**:
+  - **Data Lineage Tracking**: Complete provenance information for embedding vectors
+  - **Structured Audit Logging**: Compliance-focused logging for all operations
+  - **Advanced Quantization**: INT8 and FP16 precision for faster inference
+  - **Tensor Core Optimization**: Leverages NVIDIA Tensor Cores for 3-5x speedup
+  - **Streaming Inference**: Support for real-time, continuous embedding generation
 
 ## Getting Started
 
@@ -77,7 +88,8 @@ The `deploy-nvidia-stack.sh` script orchestrates:
 ├── api/                     # Backend API code
 ├── frontend/                # Frontend code
 ├── langchain_hana/          # Core library implementation
-│   └── gpu/                 # GPU acceleration components
+│   ├── gpu/                 # GPU acceleration components
+│   └── optimization/        # Advanced optimization components
 ├── docker/                  # Docker deployment files
 │   ├── Dockerfile           # Standard Dockerfile
 │   ├── Dockerfile.nvidia    # NVIDIA GPU-optimized Dockerfile
@@ -109,6 +121,80 @@ The `deploy-nvidia-stack.sh` script orchestrates:
 └── examples/                # Example implementations
 ```
 
+## Multi-GPU Support
+
+The enhanced integration now includes comprehensive multi-GPU support for embedding generation, enabling significantly faster processing of large document collections. This feature distributes workloads intelligently across all available NVIDIA GPUs in your system.
+
+### Key Multi-GPU Features
+
+- **Dynamic Load Balancing**: Automatically distributes tasks based on GPU capabilities and current workload
+- **Batch Processing Optimization**: Intelligently splits large batches across multiple GPUs
+- **Priority-Based Scheduling**: Critical tasks (like query embeddings) are prioritized over background tasks
+- **Real-Time Monitoring**: Tracks GPU utilization, memory usage, and task execution statistics
+- **Automatic Failover**: Gracefully handles GPU failures by redistributing work
+- **Cache Management**: Intelligent caching of embeddings with configurable persistence
+- **TensorRT Integration**: Combines multi-GPU support with TensorRT optimization for maximum performance
+
+### Using Multi-GPU Embeddings
+
+```python
+from langchain_hana import MultiGPUEmbeddings, HanaTensorRTMultiGPUEmbeddings
+from langchain_core.embeddings import HuggingFaceEmbeddings
+from langchain_hana.gpu.multi_gpu_manager import get_multi_gpu_manager
+
+# Option 1: Wrap any embedding model for multi-GPU support
+base_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+multi_gpu_embeddings = MultiGPUEmbeddings(
+    base_embeddings=base_model,
+    batch_size=32,
+    enable_caching=True
+)
+
+# Option 2: Use the specialized TensorRT-optimized multi-GPU embeddings
+trt_embeddings = HanaTensorRTMultiGPUEmbeddings(
+    model_name="sentence-transformers/all-mpnet-base-v2",
+    batch_size=64,
+    use_fp16=True,
+    enable_tensor_cores=True
+)
+
+# Generate embeddings across all available GPUs
+texts = ["Text 1", "Text 2", "Text 3", ..., "Text 1000"]
+embeddings = trt_embeddings.embed_documents(texts)
+```
+
+See the [examples/multi_gpu_embeddings_demo.py](examples/multi_gpu_embeddings_demo.py) for a complete benchmark and usage example.
+
+## Testing
+
+The project includes comprehensive testing to ensure reliability and performance:
+
+### API Testing
+
+To test all API endpoints with mock implementations:
+
+```bash
+# Run API endpoint tests
+./run_api_tests.sh
+```
+
+This script creates a test environment with mock implementations for all external dependencies (HANA, embedding models, etc.) and validates all API endpoints.
+
+### Unit Testing
+
+Run unit tests with:
+
+```bash
+# Run all unit tests
+pytest tests/unit_tests/
+
+# Run specific test modules
+pytest tests/unit_tests/test_gpu_embeddings.py
+pytest tests/unit_tests/test_multi_gpu_manager.py
+```
+
+See [Testing Guide](docs/testing_api_endpoints.md) for more details on the testing infrastructure.
+
 ## Documentation
 
 - [API Reference](docs/api/reference.md)
@@ -120,6 +206,12 @@ The `deploy-nvidia-stack.sh` script orchestrates:
 - [Development Guides](docs/development/)
   - [Configuration Guide](docs/development/configuration.md)
   - [GitHub Synchronization](docs/development/github-sync.md)
+- [Testing Guides](docs/)
+  - [API Endpoint Testing](docs/testing_api_endpoints.md)
+  - [Test Coverage Report](docs/test_coverage.md)
+- [Advanced Features](docs/optimization/)
+  - [Optimization Components Guide](docs/optimization/optimization_guide.md)
+  - [Multi-GPU Deployment Guide](docs/optimization/multi_gpu_guide.md)
 
 ## License
 

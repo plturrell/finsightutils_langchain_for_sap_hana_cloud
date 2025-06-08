@@ -1,0 +1,39 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy API code
+COPY . .
+
+# Create mock directories
+RUN mkdir -p /app/mocks/hdbcli
+RUN mkdir -p /app/mocks/langchain_hana
+RUN mkdir -p /app/mocks/sentence_transformers
+
+# Create cache directories
+RUN mkdir -p /app/cache/tensorrt
+RUN mkdir -p /app/cache/embeddings
+
+# Expose port
+EXPOSE 8000
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV LOG_LEVEL=INFO
+ENV TEST_MODE=true
+ENV PYTHONPATH=/app
+
+# Run the test index file
+CMD ["uvicorn", "index_test:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.local
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./cache:/app/cache
+    environment:
+      - HANA_HOST=${HANA_HOST:-localhost}
+      - HANA_PORT=${HANA_PORT:-30015}
+      - HANA_USER=${HANA_USER:-SYSTEM}
+      - HANA_PASSWORD=${HANA_PASSWORD:-password}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENABLE_ERROR_CONTEXT=true
+      - ERROR_DETAIL_LEVEL=verbose
+      - INCLUDE_SUGGESTIONS=true
+      - ENABLE_CORS=true
+      - CORS_ORIGINS=*
+      - JWT_SECRET=${JWT_SECRET:-devsecrethanacloud}
+      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+      - MULTI_GPU_ENABLED=false
+      - USE_TENSORRT=false
+      - TEST_MODE=true  # Enable test mode for running without a real HANA connection
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped

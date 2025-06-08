@@ -1,0 +1,34 @@
+{
+  "name": "LangChain Integration for SAP HANA Cloud with GPU Acceleration",
+  "version": "1.0.2",
+  "description": "LangChain integration with SAP HANA Cloud leveraging NVIDIA GPU acceleration for fast vector search and embedding generation",
+  "author": "plturrell",
+  "labels": ["NLP", "Vector Database", "LangChain", "SAP HANA", "GPU Acceleration"],
+  "endpoints": [
+    {
+      "name": "API",
+      "port": 8000,
+      "url": "http://localhost:8000",
+      "description": "Main API endpoint for vector operations"
+    },
+    {
+      "name": "Frontend",
+      "port": 3000,
+      "url": "http://localhost:3000",
+      "description": "Web frontend for interacting with the API"
+    }
+  ],
+  "services": ["api", "frontend"],
+  "hardware": {
+    "gpus": {
+      "required": true,
+      "count": 1,
+      "type": ["NVIDIA T4", "NVIDIA A10", "NVIDIA A100", "NVIDIA H100"]
+    }
+  },
+  "quick_start_guide": "# Quick Start Guide\n\n## 1. Set Environment Variables\nSet SAP HANA Cloud connection details:\n```\nexport HANA_HOST=your-hana-host.hanacloud.ondemand.com\nexport HANA_PORT=443\nexport HANA_USER=your-username\nexport HANA_PASSWORD=your-password\nexport DEFAULT_TABLE_NAME=EMBEDDINGS\n```\n\n## 2. Start the Services\nStart the services with Docker Compose:\n```\ndocker-compose -f ngc-blueprint.yml up -d\n```\n\n## 3. Access the API\nAPI is available at http://localhost:8000 with documentation at http://localhost:8000/docs\n\n## 4. Access the Frontend\nWeb interface is available at http://localhost:3000\n\n## 5. Test Mode\nIf you don't have a SAP HANA Cloud instance, you can set TEST_MODE=true to use mock implementations:\n```\nexport TEST_MODE=true\ndocker-compose -f ngc-blueprint.yml up -d\n```\n",
+  "resources": {
+    "docs": "https://github.com/plturrell/langchain-integration-for-sap-hana-cloud/tree/main/docs",
+    "github": "https://github.com/plturrell/langchain-integration-for-sap-hana-cloud"
+  }
+}
