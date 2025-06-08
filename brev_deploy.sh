@@ -1,5 +1,6 @@
 #!/bin/bash
-# Deployment script for SAP HANA Cloud LangChain Integration on NVIDIA Brev
+# Direct API deployment script for SAP HANA Cloud LangChain Integration on NVIDIA Brev
+# This script runs the API directly without Docker for debugging purposes
 
 set -e
 
@@ -20,7 +21,16 @@ function echo_warning() {
   echo -e "\033[1;33m[WARNING]\033[0m $1"
 }
 
+# Set up logging to file and console
+LOG_DIR="logs"
+mkdir -p $LOG_DIR
+LOG_FILE="$LOG_DIR/deployment_$(date +%Y%m%d_%H%M%S).log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+echo_info "==================== DIRECT API DEPLOYMENT ===================="
 echo_info "Deploying SAP HANA Cloud LangChain Integration with GPU Acceleration"
+echo_info "Running API directly (no Docker) for debugging"
+echo_info "==============================================================="
 
 # Check if running in Brev environment
 if [ -z "${BREV_ENV_ID}" ]; then
@@ -28,75 +38,74 @@ if [ -z "${BREV_ENV_ID}" ]; then
 fi
 
 # Check for NVIDIA GPUs
-if ! command -v nvidia-smi &> /dev/null; then
-  echo_error "NVIDIA driver not found. This setup requires NVIDIA GPUs."
-  echo_info "Please ensure NVIDIA drivers are installed and GPUs are available."
-  exit 1
+echo_info "Checking for NVIDIA GPUs..."
+if command -v nvidia-smi &> /dev/null; then
+  echo_info "Detected NVIDIA GPUs:"
+  nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
+  
+  # Check PyTorch CUDA compatibility
+  echo_info "Checking PyTorch CUDA compatibility:"
+  python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda if torch.cuda.is_available() else \"N/A\"}'); print(f'GPU count: {torch.cuda.device_count()}'); [print(f'GPU {i}: {torch.cuda.get_device_name(i)}') for i in range(torch.cuda.device_count())]" || echo_warning "PyTorch CUDA check failed"
+else
+  echo_warning "NVIDIA driver not found. Running without GPU acceleration."
 fi
 
-# Display NVIDIA GPU information
-echo_info "Detected NVIDIA GPUs:"
-nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
+# System information
+echo_info "System information:"
+echo_info "Hostname: $(hostname)"
+echo_info "User: $(whoami)"
+echo_info "Current directory: $(pwd)"
+echo_info "Python version: $(python --version 2>&1)"
+echo_info "Pip version: $(pip --version)"
 
 # Create data directories
 echo_info "Creating data directories..."
-mkdir -p data/cache data/tensorrt
+mkdir -p data/cache data/tensorrt api/logs api/data
 
-# Check for .env file
-if [ ! -f .env ]; then
-  echo_warning "No .env file found. Checking for SAP HANA credentials in environment variables..."
-  
-  if [ -z "$HANA_HOST" ] || [ -z "$HANA_USER" ] || [ -z "$HANA_PASSWORD" ]; then
-    echo_warning "SAP HANA credentials not found in environment variables."
-    echo_info "Running in TEST_MODE=true without SAP HANA connection."
-    echo_info "To connect to a real SAP HANA instance, run ./setup_hana_credentials.sh"
-    
-    # Set TEST_MODE to true
-    export TEST_MODE=true
-  else
-    echo_info "Found SAP HANA credentials in environment variables."
-    export TEST_MODE=false
-  fi
+# Set up Python environment
+echo_info "Setting up Python environment..."
+export PYTHONPATH="$PYTHONPATH:$(pwd)"
+export PYTHONUNBUFFERED=1
+
+# Install dependencies
+echo_info "Installing dependencies..."
+if [ -f "requirements.txt" ]; then
+  pip install --no-cache-dir -r requirements.txt
+  echo_info "Installed root requirements.txt"
 else
-  echo_info "Loading credentials from .env file..."
-  set -a
-  source .env
-  set +a
+  echo_warning "Root requirements.txt not found"
 fi
 
-# Pull and build images
-echo_info "Building services (this may take a while for the first run)..."
-docker-compose build
-
-# Start services
-echo_info "Starting services with GPU support..."
-docker-compose up -d
-
-# Wait for services to be ready
-echo_info "Waiting for services to be ready..."
-sleep 10
-
-# Check if services are running
-if docker-compose ps | grep -q "Exit"; then
-  echo_error "One or more services failed to start. Checking logs..."
-  docker-compose logs
-  exit 1
-fi
-
-# Check API health
-echo_info "Checking API health..."
-if curl -s http://localhost:8000/health > /dev/null; then
-  echo_success "API is healthy!"
+if [ -f "api/requirements.txt" ]; then
+  pip install --no-cache-dir -r api/requirements.txt
+  echo_info "Installed api/requirements.txt"
 else
-  echo_warning "API health check failed. See logs for details:"
-  docker-compose logs api
+  echo_warning "api/requirements.txt not found"
 fi
 
-echo_success "Deployment completed successfully!"
-echo_info "API is available at: http://localhost:8000"
-echo_info "API Documentation: http://localhost:8000/docs"
-echo_info "Frontend is available at: http://localhost:3000"
-echo_info "GPU Info: http://localhost:8000/gpu/info"
-echo_info ""
-echo_info "To view logs: docker-compose logs -f"
-echo_info "To stop services: docker-compose down"
+# Verify key packages
+echo_info "Verifying key packages:"
+pip list | grep -E 'fastapi|uvicorn|pydantic|langchain|torch|sentence-transformers|hdbcli'
+
+# Set environment variables for test mode
+echo_info "Setting up environment variables..."
+export TEST_MODE=true
+export ENABLE_CORS=true
+export LOG_LEVEL=DEBUG  # Enable detailed logging for debugging
+export PORT=8000
+
+# Verify API files exist
+echo_info "Verifying API files exist:"
+find api -name "*.py" | sort
+
+# Test importing test_mode module
+echo_info "Testing test_mode module import:"
+cd api
+python -c "import logging; logging.basicConfig(level=logging.DEBUG); import test_mode; print('Test mode imported successfully')" || echo_warning "Failed to import test_mode"
+
+# Start the API with comprehensive logging
+echo_info "Starting API server with TEST_MODE=true and DEBUG logging..."
+echo_info "API logs will be saved to $LOG_DIR and displayed in the console"
+
+# Run the API
+python -m uvicorn app:app --host 0.0.0.0 --port 8000 --log-level debug --reload
