@@ -1,0 +1,105 @@
+version: '3.8'
+
+name: sap-hana-langchain
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile.ngc
+    image: langchain-hana-api:latest
+    container_name: langchain-hana-api
+    ports:
+      - "8000:8000"
+    environment:
+      # SAP HANA Cloud Connection
+      - HANA_HOST=${HANA_HOST:-localhost}
+      - HANA_PORT=${HANA_PORT:-30015}
+      - HANA_USER=${HANA_USER:-SYSTEM}
+      - HANA_PASSWORD=${HANA_PASSWORD:-password}
+      - DEFAULT_TABLE_NAME=${DEFAULT_TABLE_NAME:-EMBEDDINGS}
+      
+      # API Configuration
+      - PORT=8000
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENABLE_CORS=true
+      - CORS_ORIGINS=*
+      - TEST_MODE=${TEST_MODE:-false}
+      
+      # GPU Acceleration
+      - GPU_ENABLED=true
+      - USE_TENSORRT=true
+      - TENSORRT_PRECISION=fp16
+      - TENSORRT_ENGINE_CACHE_DIR=/app/trt_engines
+      - BATCH_SIZE=32
+      - MAX_BATCH_SIZE=128
+      - ENABLE_MULTI_GPU=${ENABLE_MULTI_GPU:-true}
+      - GPU_MEMORY_FRACTION=0.9
+      
+      # Error Handling
+      - ENABLE_CONTEXT_AWARE_ERRORS=true
+      - ERROR_VERBOSITY=standard
+      
+      # Vector Operations
+      - DEFAULT_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+      
+    volumes:
+      - nvidia-trt-engines:/app/trt_engines
+      - nvidia-api-data:/app/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: langchain-hana-frontend:latest
+    container_name: langchain-hana-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - BACKEND_URL=http://api:8000
+      - VITE_ENABLE_VECTOR_VISUALIZATION=true
+    depends_on:
+      - api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  nvidia-trt-engines:
+    driver: local
+  nvidia-api-data:
+    driver: local
+
+networks:
+  default:
+    name: sap-hana-langchain-network
+    driver: bridge

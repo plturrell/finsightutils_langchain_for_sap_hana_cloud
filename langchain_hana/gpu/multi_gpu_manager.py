@@ -15,16 +15,16 @@ from typing import List, Dict, Any, Optional, Union, Callable, Tuple
 import numpy as np
 import json
 from pathlib import Path
-import threading
 import uuid
 
-# Conditional imports based on availability
-try:
-    import torch
-    import torch.cuda as cuda
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
+# Import GPU dependencies from centralized imports
+from langchain_hana.gpu.imports import (
+    torch, 
+    cuda,
+    TORCH_AVAILABLE,
+    CUDA_AVAILABLE,
+    get_gpu_info
+)
 
 logger = logging.getLogger(__name__)
 

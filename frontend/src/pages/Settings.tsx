@@ -38,6 +38,7 @@ import {
   Check as CheckIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import ExperienceManager from '../components/ExperienceManager';
 
 interface Config {
   database: {
@@ -206,84 +207,15 @@ const Settings: React.FC = () => {
 
   return (
     <Box className="fade-in">
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" fontWeight="500">
-          Settings
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Configure the SAP HANA Cloud LangChain integration
-        </Typography>
-      </Box>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
-
-      <Snackbar
-        open={saved}
-        autoHideDuration={5000}
-        onClose={() => setSaved(false)}
-        message="Configuration saved successfully"
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        ContentProps={{
-          sx: {
-            bgcolor: 'success.main',
-            '& .MuiSnackbarContent-message': {
-              display: 'flex',
-              alignItems: 'center',
-            },
-          },
-        }}
-        message={
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <CheckIcon sx={{ mr: 1 }} />
-            Configuration saved successfully
-          </Box>
-        }
+      <ExperienceManager 
+        currentComponent="settings"
+        onOpenAdvanced={() => {}}
       />
-
-      <Card sx={{ mb: 3 }}>
-        <CardContent sx={{ p: 0 }}>
-          <Tabs
-            value={tabValue}
-            onChange={handleTabChange}
-            variant="fullWidth"
-            sx={{ borderBottom: 1, borderColor: 'divider' }}
-          >
-            <Tab 
-              label="Database" 
-              icon={<StorageIcon />} 
-              iconPosition="start"
-            />
-            <Tab 
-              label="Embeddings" 
-              icon={<DataObjectIcon />}
-              iconPosition="start"
-            />
-            <Tab 
-              label="GPU Acceleration" 
-              icon={<MemoryIcon />}
-              iconPosition="start"
-            />
-            <Tab 
-              label="API Settings" 
-              icon={<SettingsIcon />}
-              iconPosition="start"
-            />
-          </Tabs>
-
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <Box sx={{ p: 3 }}>
-              {/* Database Settings */}
-              {tabValue === 0 && (
-                <Box>
-                  <Typography variant="h6" gutterBottom>
+      
+      {/* The original complex settings interface is hidden and replaced with SimpleSettings 
+          when simple mode is enabled through the ExperienceManager */}
+    </Box>
+  );
                     SAP HANA Cloud Database Connection
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>

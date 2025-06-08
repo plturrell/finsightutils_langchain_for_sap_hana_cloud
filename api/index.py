@@ -16,6 +16,11 @@ import time
 import json
 from contextlib import asynccontextmanager
 
+# Initialize test mode if enabled
+if os.environ.get("TEST_MODE", "").lower() in ("true", "1", "yes", "y"):
+    import test_mode
+    logging.info("Test mode enabled: Using mock HANA implementation")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -102,51 +107,112 @@ async def add_process_time_header(request: Request, call_next):
             }
         )
 
-# Mock vector search for Vercel deployment (in production this would connect to SAP HANA)
-async def mock_vector_search(query: str, k: int = 4, filter: Optional[Dict] = None, 
+# Import required components for real search
+from hdbcli import dbapi
+from langchain_hana import HanaDB, HanaInternalEmbeddings
+from langchain_hana.utils import DistanceStrategy
+from langchain_core.documents import Document
+from sentence_transformers import SentenceTransformer
+import os
+
+# Database connection details
+DB_HOST = os.environ.get("HANA_HOST", "localhost")
+DB_PORT = int(os.environ.get("HANA_PORT", "30015"))
+DB_USER = os.environ.get("HANA_USER", "SYSTEM")
+DB_PASSWORD = os.environ.get("HANA_PASSWORD", "")
+DB_TABLE = os.environ.get("HANA_TABLE", "EMBEDDINGS")
+
+# Initialize embedding model
+embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+
+# Connection pool for database connections
+_connection = None
+
+async def get_connection():
+    """Get a database connection."""
+    global _connection
+    if _connection is None or not _connection.isconnected():
+        try:
+            _connection = dbapi.connect(
+                address=DB_HOST,
+                port=DB_PORT,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                encrypt=True,
+                sslValidateCertificate=False
+            )
+            logger.info(f"Connected to SAP HANA Cloud at {DB_HOST}:{DB_PORT}")
+        except Exception as e:
+            logger.error(f"Failed to connect to SAP HANA Cloud: {str(e)}")
+            raise RuntimeError(f"Database connection failed: {str(e)}")
+    return _connection
+
+async def real_vector_search(query: str, k: int = 4, filter: Optional[Dict] = None, 
                       use_mmr: bool = False, lambda_mult: float = 0.5, fetch_k: int = 20) -> List[DocumentWithScore]:
     """
-    Mock vector search function for demonstration purposes.
-    In production, this would connect to SAP HANA Cloud.
+    Real vector search function that connects to SAP HANA Cloud.
     """
-    # Simulate processing delay
-    await asyncio.sleep(0.5)
+    logger.info(f"Performing vector search for query: '{query}', k={k}, use_mmr={use_mmr}")
     
-    # Sample results
-    results = [
-        DocumentWithScore(
-            content=f"Sample document about {query} - result 1",
-            metadata={"source": "mock", "category": "demo", "id": "1"},
-            score=0.92
-        ),
-        DocumentWithScore(
-            content=f"Another document matching {query} - result 2",
-            metadata={"source": "mock", "category": "demo", "id": "2"},
-            score=0.85
-        ),
-        DocumentWithScore(
-            content=f"Third document relevant to {query} - result 3",
-            metadata={"source": "mock", "category": "demo", "id": "3"},
-            score=0.78
-        ),
-        DocumentWithScore(
-            content=f"Fourth document about {query} - result 4",
-            metadata={"source": "mock", "category": "demo", "id": "4"},
-            score=0.71
-        )
-    ]
-    
-    # Apply filter if provided
-    if filter:
-        # In a real implementation, this would filter based on the criteria
-        logger.info(f"Filter applied: {filter}")
-    
-    # Apply MMR if requested
-    if use_mmr:
-        # In a real implementation, this would rerank using MMR
-        logger.info(f"Using MMR with lambda_mult={lambda_mult}, fetch_k={fetch_k}")
+    try:
+        # Get database connection
+        connection = await get_connection()
         
-    return results[:k]
+        # Create vectorstore instance
+        vectorstore = HanaDB(
+            connection=connection,
+            embedding=embedding_model,
+            distance_strategy=DistanceStrategy.COSINE,
+            table_name=DB_TABLE
+        )
+        
+        # Perform search
+        if use_mmr:
+            # Use MMR search for diverse results
+            docs = vectorstore.max_marginal_relevance_search(
+                query=query,
+                k=k,
+                fetch_k=fetch_k,
+                lambda_mult=lambda_mult,
+                filter=filter
+            )
+            # Convert to DocumentWithScore format with default scores
+            results = [
+                DocumentWithScore(
+                    content=doc.page_content,
+                    metadata=doc.metadata,
+                    score=0.99 - (0.05 * i)  # Approximate scores for MMR results
+                ) for i, doc in enumerate(docs)
+            ]
+        else:
+            # Use regular similarity search
+            docs_and_scores = vectorstore.similarity_search_with_score(
+                query=query,
+                k=k,
+                filter=filter
+            )
+            # Convert to DocumentWithScore format
+            results = [
+                DocumentWithScore(
+                    content=doc.page_content,
+                    metadata=doc.metadata,
+                    score=score
+                ) for doc, score in docs_and_scores
+            ]
+        
+        logger.info(f"Found {len(results)} results for query '{query}'")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error in vector search: {str(e)}")
+        # Return error information as a special result
+        return [
+            DocumentWithScore(
+                content=f"Error performing search: {str(e)}",
+                metadata={"error": str(e), "type": "search_error"},
+                score=0.0
+            )
+        ]
 
 @app.get("/")
 async def root():
@@ -226,16 +292,16 @@ import asyncio
 @app.post("/api/search", response_model=SearchResponse)
 async def vector_search(search_query: SearchQuery):
     """
-    Perform vector similarity search.
+    Perform vector similarity search against SAP HANA Cloud.
     
-    In production, this would connect to SAP HANA Cloud.
-    For the Vercel deployment, we use a mock implementation.
+    This endpoint connects to a real SAP HANA Cloud database and performs
+    vector similarity search using the HanaDB vectorstore implementation.
     """
     start_time = time.time()
     
     try:
-        # Use mock search for Vercel deployment
-        results = await mock_vector_search(
+        # Use real vector search implementation
+        results = await real_vector_search(
             query=search_query.query,
             k=search_query.k,
             filter=search_query.filter,
@@ -243,6 +309,25 @@ async def vector_search(search_query: SearchQuery):
             lambda_mult=search_query.lambda_mult,
             fetch_k=search_query.fetch_k
         )
+        
+        # Check for error response
+        if len(results) == 1 and results[0].metadata.get("type") == "search_error":
+            # Extract error details
+            error_message = results[0].metadata.get("error", "Unknown error")
+            logger.error(f"Search error returned: {error_message}")
+            
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "search_error",
+                    "message": error_message,
+                    "context": {
+                        "operation": "vector_search",
+                        "query": search_query.query,
+                        "suggestion": "Verify database connection settings and try again"
+                    }
+                }
+            )
         
         # Return formatted results
         return SearchResponse(
@@ -260,7 +345,7 @@ async def vector_search(search_query: SearchQuery):
                 "context": {
                     "operation": "vector_search",
                     "query": search_query.query,
-                    "suggestion": "Check your search parameters and try again"
+                    "suggestion": "Check your search parameters and database connection"
                 }
             }
         )

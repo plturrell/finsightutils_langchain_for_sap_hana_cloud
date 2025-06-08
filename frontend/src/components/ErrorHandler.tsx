@@ -22,6 +22,8 @@ import {
   BugReport as BugIcon,
   Info as InfoIcon
 } from '@mui/icons-material';
+import HumanText from './HumanText';
+import { humanize } from '../utils/humanLanguage';
 
 export interface ErrorDetail {
   message: string;
@@ -117,16 +119,16 @@ const ErrorHandler: React.FC<ErrorHandlerProps> = ({ error, onClose }) => {
           {operation ? `Error in ${operation}` : `${status} ${statusText}`}
           {operation && <Chip size="small" label={`Status: ${status}`} sx={{ ml: 1, fontSize: '0.7rem' }} />}
         </AlertTitle>
-        <Typography variant="body1">{message || 'An unexpected error occurred.'}</Typography>
+        <HumanText variant="body1">{message || 'An unexpected error occurred.'}</HumanText>
       </Alert>
 
       <Box sx={{ p: 2 }}>
         {suggestions && suggestions.length > 0 && (
           <>
-            <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <HumanText variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
               <TipIcon fontSize="small" sx={{ mr: 1 }} />
               Suggested Actions:
-            </Typography>
+            </HumanText>
             <List dense sx={{ pl: 2 }}>
               {suggestions.map((suggestion, index) => (
                 <ListItem key={index} sx={{ py: 0.5 }}>
@@ -140,10 +142,10 @@ const ErrorHandler: React.FC<ErrorHandlerProps> = ({ error, onClose }) => {
         {common_issues && common_issues.length > 0 && (
           <>
             <Divider sx={{ my: 1.5 }} />
-            <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <HumanText variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
               <BugIcon fontSize="small" sx={{ mr: 1 }} />
               Common Issues:
-            </Typography>
+            </HumanText>
             <List dense sx={{ pl: 2 }}>
               {common_issues.map((issue, index) => (
                 <ListItem key={index} sx={{ py: 0.5 }}>
@@ -157,10 +159,10 @@ const ErrorHandler: React.FC<ErrorHandlerProps> = ({ error, onClose }) => {
         {contextInfo && (
           <>
             <Divider sx={{ my: 1.5 }} />
-            <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <HumanText variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
               <InfoIcon fontSize="small" sx={{ mr: 1 }} />
               {contextInfo.label}:
-            </Typography>
+            </HumanText>
             <Box 
               sx={{ 
                 backgroundColor: 'rgba(0, 0, 0, 0.04)', 
@@ -180,7 +182,7 @@ const ErrorHandler: React.FC<ErrorHandlerProps> = ({ error, onClose }) => {
           <>
             <Divider sx={{ my: 1.5 }} />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography 
+              <HumanText 
                 variant="subtitle2" 
                 sx={{ 
                   color: 'text.secondary',
@@ -198,7 +200,7 @@ const ErrorHandler: React.FC<ErrorHandlerProps> = ({ error, onClose }) => {
                     transition: 'transform 0.3s'
                   }} 
                 />
-              </Typography>
+              </HumanText>
             </Box>
             <Collapse in={showDetails}>
               <Box 

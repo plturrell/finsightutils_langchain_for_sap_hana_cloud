@@ -22,6 +22,26 @@ try:
     HAS_HEALTH_MODULE = True
 except ImportError:
     HAS_HEALTH_MODULE = False
+    
+# Import GPU feature detection if available
+try:
+    from langchain_hana.gpu.imports import get_gpu_features_status, get_gpu_info
+    HAS_GPU_INFO = True
+except ImportError:
+    HAS_GPU_INFO = False
+    def get_gpu_features_status():
+        return {
+            "torch_available": False,
+            "cuda_available": False,
+            "tensorrt_available": False,
+            "pycuda_available": False,
+            "nvml_available": False,
+            "sentence_transformers_available": False,
+            "gpu_count": 0,
+            "imports": {}
+        }
+    def get_gpu_info():
+        return []
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +216,43 @@ def _fallback_health_check(settings, error_message, start_time):
             message="System information",
         ),
     ]
+    
+    # Add GPU component if available
+    if HAS_GPU_INFO:
+        try:
+            gpu_features = get_gpu_features_status()
+            gpu_info = get_gpu_info()
+            
+            gpu_status = "ok" if gpu_features.get("cuda_available", False) else "warning"
+            gpu_message = "GPU acceleration available" if gpu_features.get("cuda_available", False) else "GPU not available"
+            
+            components.append(
+                ComponentHealth(
+                    name="gpu",
+                    status=gpu_status,
+                    details={
+                        "gpu_count": gpu_features.get("gpu_count", 0),
+                        "cuda_available": gpu_features.get("cuda_available", False),
+                        "tensorrt_available": gpu_features.get("tensorrt_available", False),
+                        "devices": gpu_info,
+                        "acceleration_enabled": os.environ.get("USE_TENSORRT", "false").lower() == "true",
+                        "multi_gpu_enabled": os.environ.get("MULTI_GPU_ENABLED", "false").lower() == "true"
+                    },
+                    message=gpu_message,
+                ),
+            )
+        except Exception as e:
+            logger.warning(f"Error getting GPU information: {e}")
+            components.append(
+                ComponentHealth(
+                    name="gpu",
+                    status="warning",
+                    details={
+                        "error": str(e)
+                    },
+                    message="Error retrieving GPU information",
+                ),
+            )
     
     # Add database component (basic check)
     try:

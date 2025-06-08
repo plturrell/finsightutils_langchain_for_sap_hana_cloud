@@ -16,16 +16,22 @@ from typing import Dict, List, Optional, Union, Any
 import numpy as np
 from langchain_core.embeddings import Embeddings
 
-# Conditional imports based on GPU availability
-try:
-    import torch
-    import tensorrt as trt
-    from tensorrt.logger import Logger as TRTLogger
-    import pycuda.driver as cuda
-    import pycuda.autoinit
-    HAS_GPU_DEPENDENCIES = True
-except ImportError:
-    HAS_GPU_DEPENDENCIES = False
+# Import GPU dependencies from centralized imports
+from langchain_hana.gpu.imports import (
+    torch,
+    tensorrt as trt,
+    TRTLogger,
+    cuda_driver as cuda,
+    pynvml,
+    TORCH_AVAILABLE,
+    TENSORRT_AVAILABLE,
+    PYCUDA_AVAILABLE,
+    NVML_AVAILABLE,
+    get_gpu_info
+)
+
+# Check if we have all required dependencies for TensorRT
+HAS_GPU_DEPENDENCIES = TORCH_AVAILABLE and TENSORRT_AVAILABLE and PYCUDA_AVAILABLE
 
 logger = logging.getLogger(__name__)
 
