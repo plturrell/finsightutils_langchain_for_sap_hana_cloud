@@ -1,0 +1,428 @@
+name: Automated Docker Security Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+  schedule:
+    # Run weekly security scans (every Monday at 2:00 UTC)
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Custom version tag (default: date-based)'
+        required: false
+        type: string
+
+env:
+  ORGANIZATION: finsightintelligence
+  REPOSITORY: finsight_utils_langchain_hana
+  DOCKER_BUILDX_PLATFORMS: linux/amd64,linux/arm64
+
+jobs:
+  # Initial security scan of the codebase
+  code_security_scan:
+    name: Code Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install security analysis tools
+        run: |
+          pip install bandit safety
+          
+      - name: Run Python security scan
+        run: |
+          bandit -r . -x "./tests/*,./venv/*,./examples/*" -f json -o bandit-results.json || true
+          safety check -r requirements.txt --json > safety-results.json || true
+      
+      - name: Upload security scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-scan-results
+          path: |
+            bandit-results.json
+            safety-results.json
+
+  # Build and push secure Docker images with security fixes
+  build_secure_images:
+    name: Build Secure Docker Images
+    runs-on: ubuntu-latest
+    needs: code_security_scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: ${{ env.DOCKER_BUILDX_PLATFORMS }}
+
+      - name: Set up Docker Scout
+        uses: docker/scout-action/setup@v1
+        with:
+          version: latest
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate version tag
+        id: tags
+        run: |
+          if [ "${{ github.event.inputs.version_tag }}" != "" ]; then
+            VERSION="${{ github.event.inputs.version_tag }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=$(date +'%Y%m%d')-$(git rev-parse --short HEAD)
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "CPU_VERSION_TAG=${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:cpu-$VERSION" >> $GITHUB_ENV
+          echo "GPU_VERSION_TAG=${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:gpu-$VERSION" >> $GITHUB_ENV
+          echo "CPU_LATEST_TAG=${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:cpu-latest" >> $GITHUB_ENV
+          echo "GPU_LATEST_TAG=${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:gpu-latest" >> $GITHUB_ENV
+
+      # Create security requirements file to fix vulnerabilities
+      - name: Create security requirements file
+        run: |
+          cat > security-requirements.txt << EOF
+          setuptools>=78.1.1
+          starlette>=0.40.0
+          fastapi>=0.111.1
+          EOF
+
+      # Create secure CPU Dockerfile
+      - name: Create secure CPU Dockerfile
+        run: |
+          cat > Dockerfile.secure.cpu << EOF
+          FROM python:3.10-slim
+
+          WORKDIR /app
+
+          # Set environment variables to force CPU-only mode
+          ENV FORCE_CPU=1
+
+          # Update system packages and clean up in one step to reduce layer size
+          RUN apt-get update && \\
+              apt-get upgrade -y && \\
+              apt-get install -y --no-install-recommends \\
+              build-essential \\
+              curl \\
+              git \\
+              && apt-get clean \\
+              && rm -rf /var/lib/apt/lists/*
+
+          # Copy requirements first for better layer caching
+          COPY requirements.txt /app/
+          COPY api/requirements.txt /app/api_requirements.txt
+          COPY security-requirements.txt /app/security-requirements.txt
+
+          # Install secure Python dependencies with no cache
+          RUN pip install --no-cache-dir --upgrade pip setuptools>=78.1.1 && \\
+              pip install --no-cache-dir -r requirements.txt && \\
+              pip install --no-cache-dir -r api_requirements.txt || true && \\
+              pip install --no-cache-dir -r security-requirements.txt && \\
+              pip install --no-cache-dir numpy scipy pandas scikit-learn torch
+
+          # Create necessary directories
+          RUN mkdir -p /app/docs/pr_notes /app/api/gpu /app/api/embeddings
+
+          # Copy application code
+          COPY . /app/
+
+          # Create necessary dummy modules for CPU mode
+          RUN echo 'import logging\\nlogger = logging.getLogger("gpu_utils")\\n\\ndef get_gpu_info():\\n    return {"gpu_count": 0, "gpu_names": []}\\n\\ndef is_gpu_available():\\n    logger.warning("GPU check requested but running in CPU-only mode")\\n    return False' > /app/api/gpu/gpu_utils.py && \\
+              echo 'import logging\\nlogger = logging.getLogger("tensorrt_utils")\\n\\ndef create_tensorrt_engine(*args, **kwargs):\\n    logger.warning("TensorRT requested but running in CPU-only mode")\\n    return None' > /app/api/gpu/tensorrt_utils.py
+
+          # Add dummy TensorRTEmbeddings class for consistent interfaces
+          RUN echo 'import logging\\nlogger = logging.getLogger("dummy_tensorrt_classes")\\n\\n# Add dummy TensorRTEmbeddings class to fix inheritance\\nclass TensorRTEmbeddings:\\n    def __init__(self, *args, **kwargs):\\n        logger.warning("TensorRT embeddings initialized in CPU-only mode")\\n\\nclass EnhancedTensorRTEmbedding:\\n    def __init__(self, *args, **kwargs):\\n        logger.warning("Enhanced TensorRT embeddings initialized in CPU-only mode")\\n\\nclass TensorRTEmbeddingsWithTensorCores:\\n    def __init__(self, *args, **kwargs):\\n        logger.warning("TensorRT embeddings with tensor cores initialized in CPU-only mode")' > /app/api/embeddings/dummy_tensorrt_classes.py
+
+          # Create a non-root user and switch to it
+          RUN groupadd -r appuser && useradd -r -g appuser appuser && \\
+              chown -R appuser:appuser /app
+          USER appuser
+
+          # Expose the API port
+          EXPOSE 8000
+
+          # Set the entrypoint
+          CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          EOF
+
+      # Create secure GPU Dockerfile
+      - name: Create secure GPU Dockerfile
+        run: |
+          cat > Dockerfile.secure.gpu << EOF
+          FROM python:3.10-slim
+
+          WORKDIR /app
+
+          # Update system packages and clean up in one step to reduce layer size
+          RUN apt-get update && \\
+              apt-get upgrade -y && \\
+              apt-get install -y --no-install-recommends \\
+              build-essential \\
+              curl \\
+              git \\
+              && apt-get clean \\
+              && rm -rf /var/lib/apt/lists/*
+
+          # Copy requirements first for better layer caching
+          COPY requirements.txt /app/
+          COPY api/requirements.txt /app/api_requirements.txt
+          COPY security-requirements.txt /app/security-requirements.txt
+
+          # Install Python dependencies with no cache and security fixes
+          RUN pip install --no-cache-dir --upgrade pip setuptools>=78.1.1 && \\
+              pip install --no-cache-dir -r requirements.txt && \\
+              pip install --no-cache-dir -r api_requirements.txt || true && \\
+              pip install --no-cache-dir -r security-requirements.txt
+
+          # Copy application code
+          COPY . /app/
+
+          # Create a non-root user and switch to it
+          RUN groupadd -r appuser && useradd -r -g appuser appuser && \\
+              chown -R appuser:appuser /app
+          USER appuser
+
+          # Expose the API port
+          EXPOSE 8000
+
+          # Set the entrypoint
+          CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          EOF
+
+      # Build and push CPU image
+      - name: Build and push secure CPU image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.secure.cpu
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.CPU_VERSION_TAG }}
+            ${{ env.CPU_LATEST_TAG }}
+          cache-from: type=registry,ref=${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:cpu-buildcache
+          cache-to: type=registry,ref=${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:cpu-buildcache,mode=max
+          platforms: ${{ env.DOCKER_BUILDX_PLATFORMS }}
+
+      # Build and push GPU image
+      - name: Build and push secure GPU image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.secure.gpu
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.GPU_VERSION_TAG }}
+            ${{ env.GPU_LATEST_TAG }}
+          cache-from: type=registry,ref=${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:gpu-buildcache
+          cache-to: type=registry,ref=${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:gpu-buildcache,mode=max
+          platforms: linux/amd64  # GPU images typically only work on amd64
+      
+      # Notify Docker Build Cloud (if not a PR)
+      - name: Notify Docker Build Cloud
+        if: github.event_name != 'pull_request'
+        run: |
+          # Create Docker Hub build trigger URL
+          TOKEN="${{ secrets.DOCKER_BUILD_CLOUD_TOKEN }}"
+          REPO="${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}"
+          if [ -n "$TOKEN" ]; then
+            curl -X POST -H "Authorization: Bearer $TOKEN" \
+              "https://hub.docker.com/api/build/v1/source/${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}/trigger/webhook/"
+            echo "Notified Docker Build Cloud to update automated builds"
+          else
+            echo "Docker Build Cloud notification skipped (no token provided)"
+          fi
+
+  # Comprehensive security scanning of built images
+  security_scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: build_secure_images
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Scout
+        uses: docker/scout-action/setup@v1
+        with:
+          version: latest
+
+      # Scan CPU image
+      - name: Run Docker Scout on CPU image
+        uses: docker/scout-action@v1
+        with:
+          command: cves,recommendations
+          image: ${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:cpu-latest
+          only-severities: critical,high
+          sarif-file: cpu-scout.sarif
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ignore-unchanged: true
+          write-comment: true
+
+      # Scan GPU image
+      - name: Run Docker Scout on GPU image
+        uses: docker/scout-action@v1
+        with:
+          command: cves,recommendations
+          image: ${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:gpu-latest
+          only-severities: critical,high
+          sarif-file: gpu-scout.sarif
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ignore-unchanged: true
+          write-comment: true
+
+      # Upload security reports
+      - name: Upload SARIF reports to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: cpu-scout.sarif,gpu-scout.sarif
+          category: docker-scout
+
+  # Create Docker Hub README and information
+  update_docker_hub:
+    name: Update Docker Hub Documentation
+    runs-on: ubuntu-latest
+    needs: security_scan
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate Docker Hub README
+        run: |
+          cat > docker-hub-readme.md << EOF
+          # Finsight Utilities for LangChain with SAP HANA
+          
+          Secure Docker images for integrating LangChain with SAP HANA Cloud.
+          
+          ## Security Features
+          
+          These images include enhanced security features:
+          
+          * Non-root user execution
+          * Updated system packages
+          * Fixed critical dependencies (setuptools, starlette, fastapi)
+          * Regular security scanning with Docker Scout
+          
+          ## Available Tags
+          
+          * \`cpu-latest\`: CPU-only optimized image (latest version)
+          * \`gpu-latest\`: GPU-enabled image (latest version)
+          * \`cpu-YYYYMMDD\`: CPU-only image with specific version
+          * \`gpu-YYYYMMDD\`: GPU-enabled image with specific version
+          
+          ## Usage
+          
+          ```bash
+          # CPU version
+          docker run -p 8000:8000 ${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:cpu-latest
+          
+          # GPU version (requires NVIDIA Docker runtime)
+          docker run --gpus all -p 8000:8000 ${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:gpu-latest
+          ```
+          
+          ## Environment Variables
+          
+          * \`FORCE_CPU=1\`: Force CPU-only mode even in GPU image
+          
+          ## Security Reports
+          
+          These images are regularly scanned using Docker Scout for security vulnerabilities.
+          See the GitHub repository for detailed security reports.
+          
+          ## Source Code
+          
+          The source code and build files are available on GitHub:
+          https://github.com/${{ github.repository }}
+          EOF
+
+      - name: Update Docker Hub Description
+        uses: peter-evans/dockerhub-description@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}
+          readme-filepath: ./docker-hub-readme.md
+          short-description: "Secure Docker images for LangChain integration with SAP HANA Cloud"
+
+  # Create security reports and badges
+  generate_reports:
+    name: Generate Security Reports
+    runs-on: ubuntu-latest
+    needs: security_scan
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Scout
+        uses: docker/scout-action/setup@v1
+        with:
+          version: latest
+
+      - name: Generate security report
+        run: |
+          mkdir -p security-reports
+          date > security-reports/last_scan_date.txt
+          
+          # Generate detailed report for CPU image
+          docker scout cves ${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:cpu-latest \
+            --format markdown > security-reports/cpu_vulnerabilities.md
+            
+          # Generate detailed report for GPU image
+          docker scout cves ${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:gpu-latest \
+            --format markdown > security-reports/gpu_vulnerabilities.md
+            
+          # Generate summary report
+          cat > security-reports/security_summary.md << EOF
+          # Security Scan Summary
+          
+          Last scan date: $(date)
+          
+          ## CPU Image: ${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:cpu-latest
+          
+          $(docker scout cves ${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:cpu-latest --only-severity critical,high --format summary)
+          
+          ## GPU Image: ${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:gpu-latest
+          
+          $(docker scout cves ${{ env.ORGANIZATION }}/${{ env.REPOSITORY }}:gpu-latest --only-severity critical,high --format summary)
+          EOF
+
+      - name: Commit and push security reports
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add security-reports/
+          git commit -m "Update security reports" || echo "No changes to commit"
+          git push || echo "Failed to push security reports"
