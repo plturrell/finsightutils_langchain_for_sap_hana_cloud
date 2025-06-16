@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinSight API Health Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background-color: #0078d4;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        .card {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        .card h2 {
+            margin-top: 0;
+            font-size: 18px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        .metrics {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+        }
+        .metric {
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 36px;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+        .metric-label {
+            font-size: 14px;
+            color: #666;
+        }
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+        .alert {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .alert-error {
+            background-color: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+        }
+        .alert-warning {
+            background-color: #fff8e1;
+            color: #ff8f00;
+            border: 1px solid #ffecb3;
+        }
+        .good {
+            color: #2e7d32;
+        }
+        .warning {
+            color: #ff8f00;
+        }
+        .error {
+            color: #c62828;
+        }
+        .refresh-button {
+            background-color: #0066b8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .refresh-button:hover {
+            background-color: #005a9e;
+        }
+        .last-updated {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        table th, table td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        table th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>FinSight API Health Dashboard</h1>
+            <div>
+                <button class="refresh-button" onclick="refreshData()">Refresh Data</button>
+                <div class="last-updated" id="last-updated"></div>
+            </div>
+        </div>
+        
+        <div class="dashboard">
+            <div class="card full-width">
+                <h2>Overview</h2>
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-value" id="success-rate">-</div>
+                        <div class="metric-label">Success Rate</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="total-endpoints">-</div>
+                        <div class="metric-label">Total Endpoints</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="successful-endpoints">-</div>
+                        <div class="metric-label">Successful Endpoints</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="failed-endpoints">-</div>
+                        <div class="metric-label">Failed Endpoints</div>
+                    </div>
+                </div>
+                <div id="alerts-container"></div>
+            </div>
+            
+            <div class="card">
+                <h2>Success Rate Over Time</h2>
+                <div class="chart-container">
+                    <canvas id="success-rate-chart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Service Success Rates</h2>
+                <div class="chart-container">
+                    <canvas id="service-chart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card full-width">
+                <h2>Service Health Status</h2>
+                <table id="service-table">
+                    <thead>
+                        <tr>
+                            <th>Service</th>
+                            <th>Success Rate</th>
+                            <th>Total Endpoints</th>
+                            <th>Successful</th>
+                            <th>Failed</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Chart instances
+        let successRateChart = null;
+        let serviceChart = null;
+        
+        // Get the current date and time
+        function getCurrentDateTime() {
+            const now = new Date();
+            return now.toLocaleString();
+        }
+        
+        // Format timestamp from "YYYYMMDD_HHMMSS" to readable format
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return '';
+            
+            // Extract parts
+            const year = timestamp.substring(0, 4);
+            const month = timestamp.substring(4, 6);
+            const day = timestamp.substring(6, 8);
+            const hour = timestamp.substring(9, 11);
+            const minute = timestamp.substring(11, 13);
+            const second = timestamp.substring(13, 15);
+            
+            // Create date object
+            const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
+            
+            // Format to readable string
+            return date.toLocaleString();
+        }
+        
+        // Helper function to get status class based on success rate
+        function getStatusClass(rate) {
+            if (rate >= 90) return 'good';
+            if (rate >= 80) return 'warning';
+            return 'error';
+        }
+        
+        // Helper function to get status text based on success rate
+        function getStatusText(rate) {
+            if (rate >= 90) return 'Healthy';
+            if (rate >= 80) return 'Warning';
+            return 'Critical';
+        }
+        
+        // Update metrics with the latest data
+        function updateMetrics(historyData) {
+            if (!historyData || historyData.length === 0) {
+                return;
+            }
+            
+            // Get the latest test run
+            const latestRun = historyData[historyData.length - 1];
+            
+            // Update metrics
+            document.getElementById('success-rate').textContent = `${latestRun.success_rate.toFixed(2)}%`;
+            document.getElementById('success-rate').className = `metric-value ${getStatusClass(latestRun.success_rate)}`;
+            
+            document.getElementById('total-endpoints').textContent = latestRun.total_tests;
+            document.getElementById('successful-endpoints').textContent = latestRun.successful_tests;
+            document.getElementById('failed-endpoints').textContent = latestRun.failed_tests;
+            
+            // Update last updated time
+            document.getElementById('last-updated').textContent = `Last Updated: ${getCurrentDateTime()}`;
+        }
+        
+        // Update service table
+        function updateServiceTable(latestRun) {
+            const tableBody = document.querySelector('#service-table tbody');
+            tableBody.innerHTML = '';
+            
+            // Sort services by success rate (ascending)
+            const services = Object.keys(latestRun.service_stats).sort((a, b) => {
+                const rateA = (latestRun.service_stats[a].success / latestRun.service_stats[a].total) * 100;
+                const rateB = (latestRun.service_stats[b].success / latestRun.service_stats[b].total) * 100;
+                return rateB - rateA; // Sort from highest to lowest
+            });
+            
+            services.forEach(service => {
+                const stats = latestRun.service_stats[service];
+                const successRate = (stats.success / stats.total) * 100;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${service}</td>
+                    <td class="${getStatusClass(successRate)}">${successRate.toFixed(2)}%</td>
+                    <td>${stats.total}</td>
+                    <td>${stats.success}</td>
+                    <td>${stats.failure}</td>
+                    <td class="${getStatusClass(successRate)}">${getStatusText(successRate)}</td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+        }
+        
+        // Update success rate chart
+        function updateSuccessRateChart(historyData) {
+            const ctx = document.getElementById('success-rate-chart').getContext('2d');
+            
+            // Prepare data
+            const labels = historyData.map(item => formatTimestamp(item.timestamp));
+            const data = historyData.map(item => item.success_rate);
+            
+            // Destroy existing chart if it exists
+            if (successRateChart) {
+                successRateChart.destroy();
+            }
+            
+            // Create new chart
+            successRateChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Success Rate (%)',
+                        data: data,
+                        borderColor: '#0078d4',
+                        backgroundColor: 'rgba(0, 120, 212, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            min: Math.max(0, Math.min(...data) - 10), // Start a bit below the lowest value
+                            max: 100
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update service chart
+        function updateServiceChart(latestRun) {
+            const ctx = document.getElementById('service-chart').getContext('2d');
+            
+            // Prepare data
+            const services = Object.keys(latestRun.service_stats);
+            const successRates = services.map(service => {
+                const stats = latestRun.service_stats[service];
+                return (stats.success / stats.total) * 100;
+            });
+            
+            // Generate colors
+            const backgroundColors = services.map(service => {
+                const stats = latestRun.service_stats[service];
+                const rate = (stats.success / stats.total) * 100;
+                
+                if (rate >= 90) return 'rgba(46, 125, 50, 0.7)'; // Green
+                if (rate >= 80) return 'rgba(255, 143, 0, 0.7)'; // Amber
+                return 'rgba(198, 40, 40, 0.7)'; // Red
+            });
+            
+            // Destroy existing chart if it exists
+            if (serviceChart) {
+                serviceChart.destroy();
+            }
+            
+            // Create new chart
+            serviceChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: services,
+                    datasets: [{
+                        label: 'Success Rate (%)',
+                        data: successRates,
+                        backgroundColor: backgroundColors,
+                        borderColor: backgroundColors.map(c => c.replace('0.7', '1')),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update alerts
+        function updateAlerts(historyData) {
+            const alertsContainer = document.getElementById('alerts-container');
+            alertsContainer.innerHTML = '';
+            
+            if (!historyData || historyData.length === 0) {
+                return;
+            }
+            
+            // Get the latest test run
+            const latestRun = historyData[historyData.length - 1];
+            
+            // Check for overall alert
+            if (latestRun.success_rate < 80) {
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-error';
+                alert.textContent = `Overall success rate ${latestRun.success_rate.toFixed(2)}% is below threshold of 80%`;
+                alertsContainer.appendChild(alert);
+            }
+            
+            // Check for service alerts
+            Object.keys(latestRun.service_stats).forEach(service => {
+                const stats = latestRun.service_stats[service];
+                const successRate = (stats.success / stats.total) * 100;
+                
+                if (successRate < 80) {
+                    const alert = document.createElement('div');
+                    alert.className = 'alert alert-warning';
+                    alert.textContent = `Service '${service}' success rate ${successRate.toFixed(2)}% is below threshold of 80%`;
+                    alertsContainer.appendChild(alert);
+                }
+            });
+        }
+        
+        // Fetch and process data
+        async function fetchData() {
+            try {
+                const response = await fetch('monitor_logs/monitor_history.json');
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch data: ${response.status} ${response.statusText}`);
+                }
+                
+                const historyData = await response.json();
+                
+                if (historyData.length === 0) {
+                    console.error('No history data available');
+                    return;
+                }
+                
+                // Update UI with the data
+                updateMetrics(historyData);
+                updateSuccessRateChart(historyData);
+                
+                const latestRun = historyData[historyData.length - 1];
+                updateServiceChart(latestRun);
+                updateServiceTable(latestRun);
+                updateAlerts(historyData);
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                alert('Failed to fetch monitoring data. Check the console for details.');
+            }
+        }
+        
+        // Refresh data
+        function refreshData() {
+            fetchData();
+        }
+        
+        // Initialize dashboard
+        window.addEventListener('load', () => {
+            fetchData();
+            
+            // Set up auto-refresh every minute
+            setInterval(fetchData, 60000);
+        });
+    </script>
+</body>
+</html>

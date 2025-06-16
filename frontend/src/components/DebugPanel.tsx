@@ -59,11 +59,24 @@ interface DebugPanelProps {
   onNodeHighlight?: (nodeId: string) => void;
 }
 
+// Import the withAnimation HOC from the shared package
+import { withAnimation } from '@finsightdev/ui-animations';
+
 // Styled components
-const DebugButton = styled(Button)(({ theme }) => ({
+const BaseDebugButton = styled(Button)(({ theme }) => ({
   minWidth: 40,
   margin: theme.spacing(0, 0.5),
 }));
+
+// Enhanced button with animations
+const DebugButton = withAnimation(BaseDebugButton, {
+  animationType: 'scale',
+  enableHover: true,
+  enableSound: true,
+  soundType: 'tap',
+  tension: 350,
+  friction: 18
+});
 
 const NodeStatusChip = ({ status }: { status: string }) => {
   let color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' = 'default';

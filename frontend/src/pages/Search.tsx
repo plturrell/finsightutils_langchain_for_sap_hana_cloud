@@ -41,6 +41,7 @@ import {
 import { useSpring, useTrail, useChain, animated, useSpringRef, config } from 'react-spring';
 import { vectorStoreService, SearchResult, SearchResponse } from '../api/services';
 import ExperienceManager from '../components/ExperienceManager';
+import { EnhancedSearchResults } from '../components/enhanced/EnhancedSearchResults';
 
 // Animated components
 const AnimatedBox = animated(Box);
@@ -679,122 +680,20 @@ const Search: React.FC = () => {
       {/* Results */}
       {results.length > 0 && (
         <AnimatedBox style={resultsAnimation}>
-          <AnimatedTypography 
-            variant="h6" 
-            gutterBottom
-            sx={{
-              fontWeight: 600,
-              background: `linear-gradient(90deg, #0066B3, #2a8fd8)`,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              textFillColor: 'transparent',
-              display: 'inline-block',
+          <EnhancedSearchResults 
+            results={results}
+            animationsVisible={animationsVisible}
+            baseDelay={300}
+            resultsLabel="Search Results"
+            animateHeader={true}
+            enableHover={true}
+            onCopy={(result) => {
+              // Provide haptic feedback when copying
+              if ('navigator' in window && 'vibrate' in navigator) {
+                navigator.vibrate(5); // Subtle vibration for 5ms
+              }
             }}
-          >
-            Search Results
-          </AnimatedTypography>
-          
-          <Grid container spacing={3}>
-            {resultTrail.map((style, index) => {
-              const result = results[index];
-              if (!result) return null;
-              
-              return (
-                <Grid item xs={12} key={index}>
-                  <AnimatedPaper
-                    style={style}
-                    variant="outlined"
-                    sx={{ 
-                      p: 3, 
-                      borderRadius: '12px',
-                      transition: 'all 0.3s ease',
-                      borderColor: 'rgba(0, 102, 179, 0.2)',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: '0 12px 28px rgba(0,0,0,0.1), 0 8px 10px rgba(0,0,0,0.08)',
-                        borderColor: 'rgba(0, 102, 179, 0.4)',
-                      }
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography 
-                        variant="h6" 
-                        gutterBottom
-                        sx={{
-                          fontWeight: 600,
-                          color: '#0066B3',
-                        }}
-                      >
-                        {result.document.metadata.title || `Result ${index + 1}`}
-                      </Typography>
-                      <Chip
-                        label={`Score: ${(result.score * 100).toFixed(2)}%`}
-                        color="primary"
-                        size="small"
-                        sx={{ 
-                          background: 'linear-gradient(90deg, #0066B3, #2a8fd8)',
-                          fontWeight: 600,
-                        }}
-                      />
-                    </Box>
-                    
-                    <AnimatedDivider sx={{ mb: 2 }} />
-                    
-                    <Typography variant="body1">
-                      {result.document.page_content}
-                    </Typography>
-                    
-                    {result.document.metadata && Object.keys(result.document.metadata).length > 0 && (
-                      <Box sx={{ mt: 2 }}>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Metadata
-                        </Typography>
-                        <Grid container spacing={1}>
-                          {Object.entries(result.document.metadata).map(([key, value]) => (
-                            key !== 'title' && (
-                              <Grid item key={key}>
-                                <Chip
-                                  label={`${key}: ${value}`}
-                                  variant="outlined"
-                                  size="small"
-                                  sx={{ 
-                                    transition: 'all 0.3s ease',
-                                    '&:hover': {
-                                      transform: 'translateY(-2px)',
-                                      boxShadow: '0 2px 8px rgba(0, 102, 179, 0.1)',
-                                    }
-                                  }}
-                                />
-                              </Grid>
-                            )
-                          ))}
-                        </Grid>
-                      </Box>
-                    )}
-                    
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-                      <Tooltip title="Copy to clipboard">
-                        <IconButton 
-                          onClick={() => navigator.clipboard.writeText(result.document.page_content)}
-                          sx={{
-                            transition: 'all 0.3s ease',
-                            '&:hover': {
-                              transform: 'scale(1.1)',
-                              color: '#0066B3',
-                              backgroundColor: 'rgba(0, 102, 179, 0.05)',
-                            }
-                          }}
-                        >
-                          <CopyIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </AnimatedPaper>
-                </Grid>
-              );
-            })}
-          </Grid>
+          />
         </AnimatedBox>
       )}
       

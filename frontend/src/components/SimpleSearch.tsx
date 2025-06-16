@@ -34,6 +34,17 @@ import { vectorStoreService, SearchResult } from '../api/services';
 import ProgressiveDisclosure from './ProgressiveDisclosure';
 import HumanText from './HumanText';
 import { humanize, formatScore, formatDate } from '../utils/humanLanguage';
+import { 
+  useFadeUpAnimation, 
+  useAnimationVisibility, 
+  withAnimation,
+  withSoundFeedback
+} from '@finsightdev/ui-animations';
+import { animated } from '@react-spring/web';
+
+// Enhanced components with animations
+const AnimatedTextField = animated(TextField);
+const AnimatedButton = withSoundFeedback(Button, 'tap', { animationType: 'scale', enableHover: true });
 
 interface SimpleSearchProps {
   simpleMode: boolean;
@@ -189,7 +200,8 @@ const SimpleSearch: React.FC<SimpleSearchProps> = ({
         }}
       >
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <TextField
+          {/* Use animation hooks for the text field */}
+          <AnimatedTextField
             fullWidth
             placeholder={simpleMode ? "What would you like to know?" : "Enter search query..."}
             variant="outlined"
@@ -197,6 +209,11 @@ const SimpleSearch: React.FC<SimpleSearchProps> = ({
             onChange={(e) => setQuery(e.target.value)}
             onKeyPress={handleKeyPress}
             inputRef={searchInputRef}
+            style={useFadeUpAnimation(true, { 
+              delay: 100,
+              tension: 300,
+              friction: 20
+            })}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -217,7 +234,8 @@ const SimpleSearch: React.FC<SimpleSearchProps> = ({
               }
             }}
           />
-          <Button
+          {/* Use the enhanced button with animations and sound */}
+          <AnimatedButton
             variant="contained"
             size="large"
             onClick={handleSearch}
@@ -231,7 +249,7 @@ const SimpleSearch: React.FC<SimpleSearchProps> = ({
             endIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
           >
             Search
-          </Button>
+          </AnimatedButton>
         </Box>
         
         {/* Search History */}

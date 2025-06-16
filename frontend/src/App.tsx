@@ -11,29 +11,82 @@ import DataPipeline from './pages/DataPipeline';
 import VectorCreation from './pages/VectorCreation';
 import VectorExploration from './pages/VectorExploration';
 import Layout from './components/Layout';
+import PageTransition from './components/PageTransition';
 import { ErrorProvider } from './context/ErrorContext';
+import { AnimationProvider } from '@finsightdev/ui-animations';
+// Keep local AnimationToggle for now, we'll replace it in the next step
+import AnimationToggle from './components/AnimationToggle';
+import { EnhancedComponentProvider } from './utils/applyEnhancements';
+import { EmptyStateReplacer, defaultEmptyStateDetector } from './utils/emptyStateReplacer';
 
 const App: React.FC = () => {
   return (
     <ErrorProvider>
-      <Router>
-        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Dashboard />} />
-              <Route path="search" element={<Search />} />
-              <Route path="benchmark" element={<Benchmark />} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="developer" element={<Developer />} />
-              <Route path="reasoning" element={<Reasoning />} />
-              <Route path="data-pipeline" element={<DataPipeline />} />
-              <Route path="vector-creation" element={<VectorCreation />} />
-              <Route path="vector-exploration" element={<VectorExploration />} />
-              <Route path="vector-exploration/:vectorTable" element={<VectorExploration />} />
-            </Route>
-          </Routes>
-        </Box>
-      </Router>
+      <AnimationProvider storagePrefix="langchain-hana">
+        <EnhancedComponentProvider>
+          <EmptyStateReplacer isEmptyState={defaultEmptyStateDetector}>
+            <Router>
+              <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <AnimationToggle positionTop={false} />
+                <Routes>
+                  <Route path="/" element={<Layout />}>
+                    <Route index element={
+                      <PageTransition>
+                        <Dashboard />
+                      </PageTransition>
+                    } />
+                    <Route path="search" element={
+                      <PageTransition>
+                        <Search />
+                      </PageTransition>
+                    } />
+                    <Route path="benchmark" element={
+                      <PageTransition>
+                        <Benchmark />
+                      </PageTransition>
+                    } />
+                    <Route path="settings" element={
+                      <PageTransition>
+                        <Settings />
+                      </PageTransition>
+                    } />
+                    <Route path="developer" element={
+                      <PageTransition>
+                        <Developer />
+                      </PageTransition>
+                    } />
+                    <Route path="reasoning" element={
+                      <PageTransition>
+                        <Reasoning />
+                      </PageTransition>
+                    } />
+                    <Route path="data-pipeline" element={
+                      <PageTransition>
+                        <DataPipeline />
+                      </PageTransition>
+                    } />
+                    <Route path="vector-creation" element={
+                      <PageTransition>
+                        <VectorCreation />
+                      </PageTransition>
+                    } />
+                    <Route path="vector-exploration" element={
+                      <PageTransition>
+                        <VectorExploration />
+                      </PageTransition>
+                    } />
+                    <Route path="vector-exploration/:vectorTable" element={
+                      <PageTransition>
+                        <VectorExploration />
+                      </PageTransition>
+                    } />
+                  </Route>
+                </Routes>
+              </Box>
+            </Router>
+          </EmptyStateReplacer>
+        </EnhancedComponentProvider>
+      </AnimationProvider>
     </ErrorProvider>
   );
 };

@@ -1,5 +1,14 @@
-import { useState, useEffect } from 'react';
-import { useSpring, useTrail, useChain, useSpringRef, SpringConfig } from '@react-spring/web';
+import { useState, useEffect, useCallback } from 'react';
+import { useSpring, useTrail, useChain, useSpringRef, SpringConfig, Globals } from '@react-spring/web';
+
+// Performance optimization: Set defaults that match Apple's animation style
+// Higher framerates for smoother animations on capable devices
+Globals.assign({
+  frameLoop: 'always',
+  requestAnimationFrame: typeof window !== 'undefined' 
+    ? (cb) => window.requestAnimationFrame(cb) 
+    : undefined
+});
 
 /**
  * Configuration options for the entrance animations
@@ -342,6 +351,79 @@ export const useShimmerAnimation = (enabled = true) => {
 };
 
 /**
+ * Interface for enhanced hover effect options
+ */
+interface EnhancedHoverOptions {
+  /** Base scale value (default: 1) */
+  baseScale?: number;
+  /** Scale amount on hover (default: 1.03) */
+  hoverScale?: number;
+  /** Base shadow blur (default: 0px) */
+  baseShadowBlur?: string;
+  /** Hover shadow blur (default: 15px) */
+  hoverShadowBlur?: string;
+  /** Base shadow opacity (default: 0.1) */
+  baseShadowOpacity?: number;
+  /** Hover shadow opacity (default: 0.15) */
+  hoverShadowOpacity?: number;
+  /** Base Y offset (default: 0px) */
+  baseYOffset?: string;
+  /** Hover Y offset - negative = up (default: -3px) */
+  hoverYOffset?: string;
+  /** Spring tension (default: 350) */
+  tension?: number;
+  /** Spring friction (default: 18) */
+  friction?: number;
+  /** Color for glow/shadow effect */
+  glowColor?: string;
+  /** Whether the animation is enabled */
+  enabled?: boolean;
+}
+
+/**
+ * A hook for enhanced, Apple-like hover effects with instantaneous response
+ * Uses higher tension and lower friction for immediate response like iPadOS UI
+ * @param isHovered Current hover state
+ * @param options Configuration options
+ * @returns Spring style object
+ */
+export const useEnhancedHoverEffect = (
+  isHovered: boolean,
+  options: EnhancedHoverOptions = {}
+) => {
+  const {
+    baseScale = 1,
+    hoverScale = 1.03,
+    baseShadowBlur = '0px',
+    hoverShadowBlur = '15px',
+    baseShadowOpacity = 0.1,
+    hoverShadowOpacity = 0.15,
+    baseYOffset = '0px',
+    hoverYOffset = '-3px',
+    tension = 350, // Higher tension for immediate response like Apple UI
+    friction = 18, // Lower friction for quick settling
+    glowColor = 'rgba(0, 102, 179, 1)',
+    enabled = true
+  } = options;
+  
+  // Generate the shadow values
+  const baseShadow = `0 4px ${baseShadowBlur} rgba(0, 0, 0, ${baseShadowOpacity})`;
+  const hoverShadow = `0 8px ${hoverShadowBlur} rgba(0, 0, 0, ${hoverShadowOpacity}), 0 0 ${hoverShadowBlur} ${glowColor.replace('1)', `${baseShadowOpacity})`)}`;
+  
+  // Create the spring animation with Apple-like responsiveness
+  return useSpring({
+    transform: `scale(${isHovered && enabled ? hoverScale : baseScale}) translateY(${isHovered && enabled ? hoverYOffset : baseYOffset})`,
+    boxShadow: isHovered && enabled ? hoverShadow : baseShadow,
+    config: { 
+      tension, 
+      friction,
+      precision: 0.001 // Higher precision for smoother Apple-like transitions
+    },
+    immediate: !enabled
+  });
+};
+
+/**
  * A hook to create a pulse animation effect
  * @returns Style object for pulse animation
  */
@@ -384,4 +466,109 @@ export const useFloatAnimation = () => {
       },
     },
   };
+};
+
+/**
+ * Interface for batch animation item configuration
+ */
+interface BatchAnimationItem {
+  /** Reference key for the animation */
+  key: string;
+  /** Initial delay before starting animation (ms) */
+  delay?: number;
+  /** Custom animation configuration */
+  config?: SpringConfig;
+  /** Custom from values */
+  from?: Record<string, any>;
+  /** Custom to values */
+  to?: Record<string, any>;
+  /** Whether this animation is enabled */
+  enabled?: boolean;
+}
+
+/**
+ * A hook to create batched animations for improved performance
+ * Inspired by Apple's efficient animation batching in iPadOS
+ * @param visible Whether animations are visible
+ * @param items Array of animation configurations
+ * @returns Object with animation styles keyed by the provided keys
+ */
+export const useBatchAnimations = (
+  visible: boolean,
+  items: BatchAnimationItem[]
+) => {
+  // Default animation values
+  const defaultFrom = { opacity: 0, transform: 'translateY(20px)' };
+  const defaultTo = (enabled: boolean) => ({ 
+    opacity: enabled && visible ? 1 : 0,
+    transform: enabled && visible ? 'translateY(0)' : 'translateY(20px)'
+  });
+  const defaultConfig = { tension: 280, friction: 60, mass: 1 };
+  
+  // Create a single controller for all animations to batch them together
+  const batchedAnimations = useCallback(() => {
+    const result: Record<string, any> = {};
+    
+    items.forEach(item => {
+      const {
+        key,
+        delay = 0,
+        config = defaultConfig,
+        from = defaultFrom,
+        to,
+        enabled = true
+      } = item;
+      
+      result[key] = useSpring({
+        from,
+        to: to || defaultTo(enabled),
+        delay,
+        config,
+        immediate: !enabled
+      });
+    });
+    
+    return result;
+  }, [visible, items]);
+  
+  return batchedAnimations();
+};
+
+/**
+ * Apple-inspired enhanced empty state animation
+ * Creates a more engaging empty state with floating and pulsing animations
+ * @param visible Whether animation is visible
+ * @returns Style object for empty state animation
+ */
+export const useEnhancedEmptyStateAnimation = (visible: boolean = true) => {
+  // Main container animation
+  const containerAnimation = useSpring({
+    from: { opacity: 0, transform: 'scale(0.9)' },
+    to: { opacity: visible ? 1 : 0, transform: visible ? 'scale(1)' : 'scale(0.9)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  // Icon animation - combines float and pulse
+  const iconAnimation = useSpring({
+    from: { opacity: 0.7, transform: 'translateY(0px) scale(1)' },
+    to: async (next) => {
+      while (visible) {
+        // Float up while scaling up slightly
+        await next({ opacity: 1, transform: 'translateY(-15px) scale(1.05)', config: { tension: 120, friction: 14 } });
+        // Float down while scaling down slightly
+        await next({ opacity: 0.8, transform: 'translateY(0px) scale(0.98)', config: { tension: 120, friction: 14 } });
+      }
+    },
+    config: { tension: 120, friction: 14 }
+  });
+  
+  // Text animation with slight delay
+  const textAnimation = useSpring({
+    from: { opacity: 0, transform: 'translateY(20px)' },
+    to: { opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(20px)' },
+    delay: 300,
+    config: { tension: 280, friction: 60 }
+  });
+  
+  return { containerAnimation, iconAnimation, textAnimation };
 };
