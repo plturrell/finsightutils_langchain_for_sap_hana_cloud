@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAP HANA Cloud LangChain Integration - Arrow Flight</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        header {
+            background-color: #0A6ED1;
+            color: white;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .card {
+            background-color: white;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        button {
+            background-color: #0A6ED1;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #085caa;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+            padding: 0.5rem;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background-color: #f8f8f8;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>SAP HANA Cloud LangChain Integration</h1>
+        <h2>Apache Arrow Flight Interface</h2>
+    </header>
+    
+    <main>
+        <div class="card">
+            <h2>API Status</h2>
+            <div id="apiStatus">Checking API status...</div>
+            <button onclick="checkAPIStatus()">Refresh Status</button>
+        </div>
+
+        <div class="card">
+            <h2>Arrow Flight Status</h2>
+            <div id="flightStatus">Checking Flight service status...</div>
+            <button onclick="checkFlightStatus()">Refresh Status</button>
+        </div>
+
+        <div class="card">
+            <h2>API Documentation</h2>
+            <p>The following endpoints are available:</p>
+            <table>
+                <tr>
+                    <th>Endpoint</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>/health</code></td>
+                    <td>Health check endpoint</td>
+                </tr>
+                <tr>
+                    <td><code>/flight/info</code></td>
+                    <td>Arrow Flight service information</td>
+                </tr>
+            </table>
+            <p>For full API documentation, visit <a href="http://localhost:8000/docs" target="_blank">API Docs</a></p>
+        </div>
+
+        <div class="card">
+            <h2>Flight Client Example</h2>
+            <pre>
+import pyarrow.flight as flight
+
+# Connect to Flight server
+client = flight.connect('grpc://localhost:8815')
+
+# Get Flight info
+flight_info = client.get_flight_info(
+    flight.FlightDescriptor.for_command(
+        '{"table": "embeddings"}'
+    )
+)
+
+# Read data from Flight server
+reader = client.do_get(flight_info.endpoints[0].ticket)
+table = reader.read_all()
+            </pre>
+        </div>
+    </main>
+
+    <script>
+        // Check API status on page load
+        window.onload = function() {
+            checkAPIStatus();
+            checkFlightStatus();
+        };
+
+        // Function to check API status
+        function checkAPIStatus() {
+            const statusElement = document.getElementById('apiStatus');
+            statusElement.innerHTML = 'Checking API status...';
+            
+            fetch('http://localhost:8000/health')
+                .then(response => response.json())
+                .then(data => {
+                    statusElement.innerHTML = `
+                        <p><strong>Status:</strong> <span style="color: green;">✓ Online</span></p>
+                        <p><strong>Version:</strong> ${data.version}</p>
+                        <p><strong>Timestamp:</strong> ${new Date(data.timestamp * 1000).toLocaleString()}</p>
+                    `;
+                })
+                .catch(error => {
+                    statusElement.innerHTML = `
+                        <p><strong>Status:</strong> <span style="color: red;">✗ Offline</span></p>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    `;
+                });
+        }
+
+        // Function to check Flight status
+        function checkFlightStatus() {
+            const statusElement = document.getElementById('flightStatus');
+            statusElement.innerHTML = 'Checking Flight service status...';
+            
+            fetch('http://localhost:8000/flight/info')
+                .then(response => response.json())
+                .then(data => {
+                    statusElement.innerHTML = `
+                        <p><strong>Status:</strong> <span style="color: green;">✓ ${data.status}</span></p>
+                        <p><strong>Host:</strong> ${data.host}</p>
+                        <p><strong>Port:</strong> ${data.port}</p>
+                        <p><strong>Auto Start:</strong> ${data.auto_start ? 'Yes' : 'No'}</p>
+                    `;
+                })
+                .catch(error => {
+                    statusElement.innerHTML = `
+                        <p><strong>Status:</strong> <span style="color: red;">✗ Offline</span></p>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    `;
+                });
+        }
+    </script>
+</body>
+</html>

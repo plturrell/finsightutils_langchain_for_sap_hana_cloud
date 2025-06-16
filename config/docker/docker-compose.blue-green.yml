@@ -6,8 +6,8 @@ services:
   # Blue deployment (active)
   api-blue:
     build:
-      context: .
-      dockerfile: Dockerfile.nvidia
+      context: ..
+      dockerfile: docker/Dockerfile.nvidia
       args:
         BASE_IMAGE: nvcr.io/nvidia/pytorch:23.12-py3
     image: langchain-hana-nvidia:blue
@@ -24,12 +24,12 @@ services:
       
       # API Configuration
       - PORT=8000
-      - LOG_LEVEL=INFO
-      - ENABLE_CORS=true
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENABLE_CORS=${ENABLE_CORS:-true}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - JWT_SECRET=${JWT_SECRET:-sap-hana-langchain-integration-secret-key}
-      - DB_MAX_CONNECTIONS=5
-      - DB_CONNECTION_TIMEOUT=600
+      - DB_MAX_CONNECTIONS=${DB_MAX_CONNECTIONS:-5}
+      - DB_CONNECTION_TIMEOUT=${DB_CONNECTION_TIMEOUT:-600}
       
       # GPU Acceleration
       - GPU_ENABLED=true
@@ -47,14 +47,14 @@ services:
       - HEALTH_CHECK_PATH=/health/status
       
       # Error Handling
-      - ENABLE_CONTEXT_AWARE_ERRORS=true
+      - ENABLE_CONTEXT_AWARE_ERRORS=${ENABLE_CONTEXT_AWARE_ERRORS:-true}
       - ERROR_VERBOSITY=${ERROR_VERBOSITY:-standard}
       - ENABLE_ERROR_TELEMETRY=${ENABLE_ERROR_TELEMETRY:-true}
       
       # Vector Operations
-      - ENABLE_PRECISE_SIMILARITY=true
+      - ENABLE_PRECISE_SIMILARITY=${ENABLE_PRECISE_SIMILARITY:-true}
       - DEFAULT_EMBEDDING_MODEL=${DEFAULT_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
-      - ENABLE_VECTOR_VISUALIZATION=true
+      - ENABLE_VECTOR_VISUALIZATION=${ENABLE_VECTOR_VISUALIZATION:-true}
     volumes:
       - nvidia-trt-engines-blue:/app/trt_engines
       - nvidia-api-data-blue:/app/data
@@ -80,13 +80,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    command: ["python", "-m", "uvicorn", "test_app_enhanced:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+    command: ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
 
   # Green deployment (idle, for updates)
   api-green:
     build:
-      context: .
-      dockerfile: Dockerfile.nvidia
+      context: ..
+      dockerfile: docker/Dockerfile.nvidia
       args:
         BASE_IMAGE: nvcr.io/nvidia/pytorch:23.12-py3
     image: langchain-hana-nvidia:green
@@ -103,12 +103,12 @@ services:
       
       # API Configuration
       - PORT=8000
-      - LOG_LEVEL=INFO
-      - ENABLE_CORS=true
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENABLE_CORS=${ENABLE_CORS:-true}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - JWT_SECRET=${JWT_SECRET:-sap-hana-langchain-integration-secret-key}
-      - DB_MAX_CONNECTIONS=5
-      - DB_CONNECTION_TIMEOUT=600
+      - DB_MAX_CONNECTIONS=${DB_MAX_CONNECTIONS:-5}
+      - DB_CONNECTION_TIMEOUT=${DB_CONNECTION_TIMEOUT:-600}
       
       # GPU Acceleration
       - GPU_ENABLED=true
@@ -126,14 +126,14 @@ services:
       - HEALTH_CHECK_PATH=/health/status
       
       # Error Handling
-      - ENABLE_CONTEXT_AWARE_ERRORS=true
+      - ENABLE_CONTEXT_AWARE_ERRORS=${ENABLE_CONTEXT_AWARE_ERRORS:-true}
       - ERROR_VERBOSITY=${ERROR_VERBOSITY:-standard}
       - ENABLE_ERROR_TELEMETRY=${ENABLE_ERROR_TELEMETRY:-true}
       
       # Vector Operations
-      - ENABLE_PRECISE_SIMILARITY=true
+      - ENABLE_PRECISE_SIMILARITY=${ENABLE_PRECISE_SIMILARITY:-true}
       - DEFAULT_EMBEDDING_MODEL=${DEFAULT_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
-      - ENABLE_VECTOR_VISUALIZATION=true
+      - ENABLE_VECTOR_VISUALIZATION=${ENABLE_VECTOR_VISUALIZATION:-true}
     volumes:
       - nvidia-trt-engines-green:/app/trt_engines
       - nvidia-api-data-green:/app/data
@@ -159,13 +159,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    command: ["python", "-m", "uvicorn", "test_app_enhanced:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+    command: ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
 
   # Frontend service
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: ../frontend
+      dockerfile: ../docker/Dockerfile.frontend
     image: langchain-hana-frontend:latest
     container_name: sap-hana-langchain-frontend
     ports:
@@ -173,7 +173,7 @@ services:
     environment:
       - NODE_ENV=production
       - BACKEND_URL=http://traefik/api
-      - VITE_APP_VERSION=1.0.0
+      - VITE_APP_VERSION=${APP_VERSION:-1.0.0}
       - VITE_ENABLE_VECTOR_VISUALIZATION=true
       - VITE_ENABLE_DARK_MODE=true
       - VITE_ENABLE_ACCESSIBILITY=true
@@ -212,15 +212,16 @@ services:
   # Health monitoring service
   healthcheck:
     build:
-      context: ./config/docker/healthcheck
+      context: ../docker/healthcheck
       dockerfile: Dockerfile
     image: langchain-hana-healthcheck:latest
     container_name: sap-hana-langchain-healthcheck
     environment:
       - BLUE_URL=http://api-blue:8000/health/status
       - GREEN_URL=http://api-green:8000/health/status
-      - CHECK_INTERVAL=30
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-30}
       - TRAEFIK_API_URL=http://traefik:8080/api
+      - SWITCH_THRESHOLD=${SWITCH_THRESHOLD:-3}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -236,7 +237,7 @@ services:
     image: prom/prometheus:v2.43.0
     container_name: sap-hana-langchain-prometheus
     volumes:
-      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../docker/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -254,7 +255,7 @@ services:
     image: grafana/grafana:9.5.1
     container_name: sap-hana-langchain-grafana
     volumes:
-      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ../docker/config/grafana/provisioning:/etc/grafana/provisioning
       - grafana-data:/var/lib/grafana
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}

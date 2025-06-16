@@ -1,0 +1,27 @@
+[
+  {
+    "text1": "How do economic indicators predict market movements?",
+    "text2": "Economic Indicator Analysis: Leading economic indicators such as PMI readings, building permits, and initial jobless claims typically precede stock market movements by 3-6 months with a 70-80% correlation. Coincident indicators like industrial production show 85-90% concurrent correlation with market performance. The yield curve remains the single most reliable recession predictor, with inversions preceding economic downturns by 12-18 months with 85% historical accuracy since 1955.",
+    "score": 0.92
+  },
+  {
+    "text1": "What strategies minimize tax impact on investment returns?",
+    "text2": "Tax-Efficient Investment Strategies: Optimizing after-tax returns requires strategic asset location, tax-loss harvesting, and careful withdrawal sequencing. Place tax-inefficient assets (high-yield bonds, REITs) in tax-advantaged accounts while holding tax-efficient ETFs and municipal bonds in taxable accounts. Systematic tax-loss harvesting can add 0.5-1.0% in annual after-tax returns without changing portfolio risk characteristics. For retirees, withdrawal sequencing from taxable, tax-deferred, and tax-free accounts can extend portfolio longevity by 2-4 years compared to naive approaches.",
+    "score": 0.89
+  },
+  {
+    "text1": "How are financial institutions implementing AI for risk management?",
+    "text2": "AI Risk Management Implementation: Financial institutions are deploying AI across three primary risk domains: credit underwriting, fraud detection, and compliance monitoring. Advanced machine learning models now process 3,000+ variables for credit decisions compared to 20-30 in traditional models, reducing default rates by 25-35% while expanding approval rates by 15-20%. In fraud detection, AI systems analyze transaction patterns in real-time, reducing false positives by 60% while increasing fraud detection rates by 30%. Regulatory compliance applications focus on AML monitoring, trading surveillance, and conduct risk, reducing manual review requirements by up to 70%.",
+    "score": 0.94
+  },
+  {
+    "text1": "What's the impact of demographic shifts on long-term investment returns?",
+    "text2": "Demographic Investment Impact: Aging populations in developed markets create structural headwinds for economic growth and asset returns. The decline in working-age population growth reduces potential GDP by approximately 0.5-1.0% annually over the next three decades. Historically, countries experiencing a 10% increase in the elderly dependency ratio have seen equity risk premiums rise by 1.4% and equilibrium real interest rates fall by 1.5%. Investment implications include reduced long-term returns across asset classes, increased demand for income-generating securities, and geographic allocation shifts toward countries with favorable demographic profiles.",
+    "score": 0.88
+  },
+  {
+    "text1": "How do exchange rate fluctuations affect multinational company earnings?",
+    "text2": "Exchange Rate Earnings Impact: Currency fluctuations significantly impact multinational corporations through transaction exposure, translation effects, and competitive positioning. For S&P 500 companies deriving 40%+ of revenue internationally, a 10% appreciation in the US dollar typically reduces earnings by 3-5%. Industries with high foreign revenue but localized cost structures (technology, pharmaceuticals) face greater translation risk, while companies with global supply chains but concentrated sales markets (automobiles, electronics) face greater transaction exposure. Operational hedging through production diversification proves more effective than financial hedging for managing long-term currency risks.",
+    "score": 0.91
+  }
+]

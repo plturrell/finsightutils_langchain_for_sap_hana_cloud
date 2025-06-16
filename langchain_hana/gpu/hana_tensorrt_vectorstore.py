@@ -18,8 +18,16 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 from langchain_hana.vectorstores import HanaDB
-from langchain_hana.embeddings import HanaInternalEmbeddings
-from langchain_hana.utils import DistanceStrategy
+from langchain_hana.vectorstores import (
+    default_distance_strategy,
+    default_table_name,
+    default_content_column,
+    default_metadata_column,
+    default_vector_column,
+    default_vector_column_length,
+    default_vector_column_type,
+    DistanceStrategy
+)
 from langchain_hana.gpu.hana_tensorrt_embeddings import HanaTensorRTEmbeddings
 from langchain_hana.gpu.multi_gpu_manager import get_multi_gpu_manager
 from langchain_hana.gpu.vector_serialization import (
@@ -95,13 +103,13 @@ class HanaTensorRTVectorStore(HanaDB):
         self,
         connection: dbapi.Connection,
         embedding: Embeddings,
-        distance_strategy: DistanceStrategy = HanaDB.default_distance_strategy,
-        table_name: str = HanaDB.default_table_name,
-        content_column: str = HanaDB.default_content_column,
-        metadata_column: str = HanaDB.default_metadata_column,
-        vector_column: str = HanaDB.default_vector_column,
-        vector_column_length: int = HanaDB.default_vector_column_length,
-        vector_column_type: str = HanaDB.default_vector_column_type,
+        distance_strategy: DistanceStrategy = default_distance_strategy,
+        table_name: str = default_table_name,
+        content_column: str = default_content_column,
+        metadata_column: str = default_metadata_column,
+        vector_column: str = default_vector_column,
+        vector_column_length: int = default_vector_column_length,
+        vector_column_type: str = default_vector_column_type,
         *,
         specific_metadata_columns: Optional[List[str]] = None,
         batch_size: int = 32,
@@ -508,13 +516,13 @@ class HanaTensorRTVectorStore(HanaDB):
         embedding: Embeddings,
         metadatas: Optional[List[Dict]] = None,
         connection: dbapi.Connection = None,
-        distance_strategy: DistanceStrategy = HanaDB.default_distance_strategy,
-        table_name: str = HanaDB.default_table_name,
-        content_column: str = HanaDB.default_content_column,
-        metadata_column: str = HanaDB.default_metadata_column,
-        vector_column: str = HanaDB.default_vector_column,
-        vector_column_length: int = HanaDB.default_vector_column_length,
-        vector_column_type: str = HanaDB.default_vector_column_type,
+        distance_strategy: DistanceStrategy = default_distance_strategy,
+        table_name: str = default_table_name,
+        content_column: str = default_content_column,
+        metadata_column: str = default_metadata_column,
+        vector_column: str = default_vector_column,
+        vector_column_length: int = default_vector_column_length,
+        vector_column_type: str = default_vector_column_type,
         *,
         specific_metadata_columns: Optional[List[str]] = None,
         batch_size: int = 32,

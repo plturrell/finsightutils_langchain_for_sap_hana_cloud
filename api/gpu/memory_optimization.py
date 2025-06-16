@@ -8,9 +8,9 @@ from typing import Dict, List, Optional, Union, Any, Callable, Tuple, Set
 
 import numpy as np
 
-import gpu_utils
-from multi_gpu import get_gpu_manager
-from dynamic_batching import get_batch_sizer
+from api.gpu import gpu_utils
+from api.gpu.multi_gpu import get_gpu_manager
+from api.gpu.dynamic_batching import get_batch_sizer
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,10 @@ class MemoryOptimizer:
         
         def monitor_memory():
             try:
-                import torch
+                try:
+                    import torch
+                except ImportError:
+                    logger.warning("torch not available, using CPU-only mode")
                 
                 while True:
                     try:
@@ -141,7 +144,10 @@ class MemoryOptimizer:
         # GPU memory garbage collection
         if gpu_utils.is_torch_available():
             try:
-                import torch
+                try:
+                    import torch
+                except ImportError:
+                    logger.warning("torch not available, using CPU-only mode")
                 
                 # Run garbage collection on each device
                 for device_name in self.gpu_manager.get_available_devices():
@@ -173,7 +179,10 @@ class MemoryOptimizer:
             return
         
         try:
-            import torch
+            try:
+                import torch
+            except ImportError:
+                logger.warning("torch not available, using CPU-only mode")
             
             if device_id is None:
                 # Clear cache on all devices
@@ -210,7 +219,10 @@ class MemoryOptimizer:
             return None
         
         try:
-            import torch
+            try:
+                import torch
+            except ImportError:
+                logger.warning("torch not available, using CPU-only mode")
             
             pool_key = (shape, dtype, device)
             
@@ -235,7 +247,10 @@ class MemoryOptimizer:
             return
         
         try:
-            import torch
+            try:
+                import torch
+            except ImportError:
+                logger.warning("torch not available, using CPU-only mode")
             
             if not isinstance(tensor, torch.Tensor):
                 return
@@ -342,7 +357,10 @@ class MemoryOptimizer:
                     results.extend(chunk_results)
                 else:
                     # Convert numpy array to list and extend
-                    results = results.tolist()
+                    # Convert numpy array to list if needed
+                    if isinstance(results, np.ndarray):
+                        results = results.tolist()
+                    # Otherwise, results is already a list
                     results.extend(chunk_results)
             
             # Clean up after batch processing
@@ -368,3 +386,29 @@ def get_memory_optimizer() -> MemoryOptimizer:
         _memory_optimizer = MemoryOptimizer()
     
     return _memory_optimizer
+
+
+def optimize_memory_usage(embeddings=None, **kwargs):
+    """
+    Optimize memory usage for embedding operations.
+    
+    This function is a convenience wrapper around the MemoryOptimizer class
+    that provides memory optimization capabilities for embedding operations in CPU mode.
+    
+    Args:
+        embeddings: Optional list of embeddings to optimize.
+        **kwargs: Additional keyword arguments for memory optimization.
+        
+    Returns:
+        Optimized embeddings if provided, otherwise None.
+    """
+    optimizer = get_memory_optimizer()
+    
+    # Run basic memory optimization
+    optimizer.auto_gc()
+    
+    # If embeddings are provided, optimize them
+    if embeddings is not None:
+        return optimizer.optimize_embeddings(embeddings)
+        
+    return None

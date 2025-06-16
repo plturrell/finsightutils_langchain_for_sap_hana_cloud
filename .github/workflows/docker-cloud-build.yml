@@ -1,0 +1,63 @@
+name: Docker Cloud Build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  docker_cloud_build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: finsightintelligence/langchainsaphana
+
+      # Trigger Docker Hub build for CPU image
+      - name: Trigger Docker Hub build (CPU)
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile.cpu
+          push: true
+          tags: finsightintelligence/langchainsaphana:cpu-latest
+          build-args: |
+            FORCE_CPU=1
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=finsightintelligence/langchainsaphana:cpu-buildcache
+          cache-to: type=registry,ref=finsightintelligence/langchainsaphana:cpu-buildcache,mode=max
+
+      # Trigger Docker Hub build for GPU image
+      - name: Trigger Docker Hub build (GPU)
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: finsightintelligence/langchainsaphana:gpu-latest
+          build-args: |
+            INSTALL_GPU=true
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=finsightintelligence/langchainsaphana:gpu-buildcache
+          cache-to: type=registry,ref=finsightintelligence/langchainsaphana:gpu-buildcache,mode=max

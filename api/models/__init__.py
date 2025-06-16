@@ -11,15 +11,39 @@ from api.models.models import (
     VectorStoreResponse,
     HealthResponse,
     ErrorResponse,
-    ConfigurationResponse
+    ConfigurationResponse,
+    QueryResultDocumentResponse,
+    DocumentResponse
+)
+
+from api.models.flight_models import (
+    FlightQueryRequest,
+    FlightQueryResponse,
+    FlightUploadRequest,
+    FlightUploadResponse,
+    FlightListResponse,
+    FlightInfoResponse,
+    FlightCollection
 )
 
 __all__ = [
+    # Core models
     "EmbeddingRequest",
     "EmbeddingResponse",
     "VectorStoreRequest",
     "VectorStoreResponse",
     "HealthResponse",
     "ErrorResponse",
-    "ConfigurationResponse"
+    "ConfigurationResponse",
+    "QueryResultDocumentResponse",
+    "DocumentResponse",
+    
+    # Arrow Flight models
+    "FlightQueryRequest",
+    "FlightQueryResponse",
+    "FlightUploadRequest",
+    "FlightUploadResponse",
+    "FlightListResponse",
+    "FlightInfoResponse",
+    "FlightCollection"
 ]

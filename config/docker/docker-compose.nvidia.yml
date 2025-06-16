@@ -4,12 +4,15 @@ name: sap-hana-langchain-nvidia
 
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile.nvidia
-      args:
-        BASE_IMAGE: nvcr.io/nvidia/pytorch:23.12-py3
-    image: langchain-hana-nvidia:latest
+    # Option 1: Use pre-built image from Docker Hub
+    image: plturrell/langchain-hana-nvidia:latest
+    
+    # Option 2: Build locally (comment out image: above and uncomment below if you prefer to build locally)
+    # build:
+    #   context: ..
+    #   dockerfile: docker/Dockerfile.nvidia
+    #   args:
+    #     - BASE_IMAGE=nvcr.io/nvidia/pytorch:23.12-py3
     container_name: sap-hana-langchain-api-nvidia
     ports:
       - "8000:8000"
@@ -23,16 +26,16 @@ services:
       
       # API Configuration
       - PORT=8000
-      - LOG_LEVEL=INFO
-      - ENABLE_CORS=true
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      - JWT_SECRET=${JWT_SECRET:-sap-hana-langchain-integration-secret-key}
-      - DB_MAX_CONNECTIONS=5
-      - DB_CONNECTION_TIMEOUT=600
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENABLE_CORS=${ENABLE_CORS:-true}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://example.com,http://localhost:3000}
+      - JWT_SECRET=${JWT_SECRET}
+      - DB_MAX_CONNECTIONS=${DB_MAX_CONNECTIONS:-5}
+      - DB_CONNECTION_TIMEOUT=${DB_CONNECTION_TIMEOUT:-600}
       
       # GPU Acceleration
       - GPU_ENABLED=true
-      - USE_TENSORRT=true
+      - USE_TENSORRT=${USE_TENSORRT:-true}
       - TENSORRT_PRECISION=${TENSORRT_PRECISION:-fp16}
       - TENSORRT_ENGINE_CACHE_DIR=/app/trt_engines
       - BATCH_SIZE=${BATCH_SIZE:-32}
@@ -40,19 +43,34 @@ services:
       - ENABLE_MULTI_GPU=${ENABLE_MULTI_GPU:-true}
       - GPU_MEMORY_FRACTION=${GPU_MEMORY_FRACTION:-0.9}
       
+      # Advanced GPU Optimization
+      - DALI_ENABLED=${DALI_ENABLED:-true}
+      - USE_TRANSFORMER_ENGINE=${USE_TRANSFORMER_ENGINE:-true}
+      - NVTX_PROFILING_ENABLED=${NVTX_PROFILING_ENABLED:-false}
+      - AUTO_TUNE_ENABLED=${AUTO_TUNE_ENABLED:-true}
+      - AUTO_TUNE_DURATION_MINUTES=${AUTO_TUNE_DURATION_MINUTES:-60}
+      
       # Error Handling
-      - ENABLE_CONTEXT_AWARE_ERRORS=true
+      - ENABLE_CONTEXT_AWARE_ERRORS=${ENABLE_CONTEXT_AWARE_ERRORS:-true}
       - ERROR_VERBOSITY=${ERROR_VERBOSITY:-standard}
       - ENABLE_ERROR_TELEMETRY=${ENABLE_ERROR_TELEMETRY:-true}
       
       # Vector Operations
-      - ENABLE_PRECISE_SIMILARITY=true
+      - ENABLE_PRECISE_SIMILARITY=${ENABLE_PRECISE_SIMILARITY:-true}
       - DEFAULT_EMBEDDING_MODEL=${DEFAULT_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
-      - ENABLE_VECTOR_VISUALIZATION=true
+      - ENABLE_VECTOR_VISUALIZATION=${ENABLE_VECTOR_VISUALIZATION:-true}
+      
+      # Monitoring
+      - ENABLE_PROMETHEUS=${ENABLE_PROMETHEUS:-true}
+      - ENABLE_OPENTELEMETRY=${ENABLE_OPENTELEMETRY:-true}
+      - DCGM_ENABLED=${DCGM_ENABLED:-true}
+      - METRICS_PORT=8001
     volumes:
       - nvidia-trt-engines:/app/trt_engines
       - nvidia-api-data:/app/data
       - nvidia-api-logs:/app/logs
+      - nvidia-model-repo:/app/models
+      - nvidia-config:/app/config
     deploy:
       resources:
         reservations:
@@ -67,12 +85,17 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    command: ["python", "-m", "uvicorn", "test_app_enhanced:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+    command: ["sh", "-c", "python -m scripts.auto_tune --duration=10 --output-file=/app/config/auto_tuned_config.json && python -m uvicorn api.core.main:app --host 0.0.0.0 --port 8000 --workers 4 --log-level ${LOG_LEVEL:-info}"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: ../frontend
+      dockerfile: ../docker/Dockerfile.frontend
     image: langchain-hana-frontend:latest
     container_name: sap-hana-langchain-frontend
     ports:
@@ -80,7 +103,7 @@ services:
     environment:
       - NODE_ENV=production
       - BACKEND_URL=http://api:8000
-      - VITE_APP_VERSION=1.0.0
+      - VITE_APP_VERSION=${APP_VERSION:-1.0.0}
       - VITE_ENABLE_VECTOR_VISUALIZATION=true
       - VITE_ENABLE_DARK_MODE=true
       - VITE_ENABLE_ACCESSIBILITY=true
@@ -93,6 +116,117 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  triton-server:
+    image: nvcr.io/nvidia/tritonserver:22.12-py3
+    container_name: sap-hana-langchain-triton
+    ports:
+      - "8001:8001"
+      - "8002:8002"
+    volumes:
+      - nvidia-model-repo:/models
+    command: ["tritonserver", "--model-repository=/models", "--strict-model-config=false", "--log-verbose=1"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  dcgm-exporter:
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:2.4.6-2.6.10-ubuntu20.04
+    container_name: sap-hana-langchain-dcgm
+    ports:
+      - "9400:9400"
+    volumes:
+      - nvidia-dcgm-config:/etc/dcgm-exporter
+    restart: unless-stopped
+    command: ["dcgm-exporter", "-f", "/etc/dcgm-exporter/default-counters.csv"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9400/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  prometheus:
+    image: prom/prometheus:v2.40.1
+    container_name: sap-hana-langchain-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - nvidia-prometheus-config:/etc/prometheus
+      - nvidia-prometheus-data:/prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]
+    restart: unless-stopped
+    depends_on:
+      - api
+      - dcgm-exporter
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  continuous-learning:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.nvidia
+    image: langchain-hana-nvidia:latest
+    container_name: sap-hana-langchain-continuous-learning
+    volumes:
+      - nvidia-config:/app/config
+      - nvidia-api-logs:/app/logs
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+    command: ["python", "-m", "scripts.continuous_learning", "--duration=0", "--config-file=/app/config/continuous_learning_config.json", "--output-dir=/app/config/learned", "--monitoring-interval=300"]
+    depends_on:
+      - api
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
 volumes:
   nvidia-trt-engines:
@@ -101,3 +235,18 @@ volumes:
     driver: local
   nvidia-api-logs:
     driver: local
+  nvidia-model-repo:
+    driver: local
+  nvidia-config:
+    driver: local
+  nvidia-dcgm-config:
+    driver: local
+  nvidia-prometheus-config:
+    driver: local
+  nvidia-prometheus-data:
+    driver: local
+
+networks:
+  default:
+    name: sap-hana-langchain-network
+    driver: bridge

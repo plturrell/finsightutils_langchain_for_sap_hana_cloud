@@ -1,0 +1,229 @@
+version: '3.8'
+
+# Standardized Docker Compose Configuration for LangChain SAP HANA Integration
+# Based on the standardized template with project-specific customizations
+
+services:
+  # API Service
+  api:
+    image: ${DOCKER_REGISTRY:-ghcr.io}/${ORGANIZATION:-finsightdev}/langchain-hana-api:${VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: .docker/services/api/Dockerfile
+      args:
+        VERSION: ${VERSION:-1.0.0}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        TARGETPLATFORM: ${TARGETPLATFORM:-linux/amd64}
+        ENABLE_GPU: ${ENABLE_GPU:-false}
+    container_name: langchain-hana-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8000}:8000"
+      - "${FLIGHT_PORT:-8815}:8815"
+    volumes:
+      - api-cache:/app/cache
+      - api-logs:/app/logs
+    environment:
+      # Core settings
+      - TEST_MODE=${TEST_MODE:-false}
+      - ENABLE_CORS=${ENABLE_CORS:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      
+      # Arrow Flight settings
+      - FLIGHT_AUTO_START=${FLIGHT_AUTO_START:-true}
+      - FLIGHT_HOST=0.0.0.0
+      - FLIGHT_PORT=8815
+      
+      # CORS settings
+      - ALLOW_ORIGINS=${ALLOW_ORIGINS:-http://localhost:3000,http://frontend:3000}
+      
+      # SAP HANA connection settings
+      - HANA_HOST=${HANA_HOST:-}
+      - HANA_PORT=${HANA_PORT:-443}
+      - HANA_USER=${HANA_USER:-}
+      - HANA_PASSWORD=${HANA_PASSWORD:-}
+      - HANA_DATABASE=${HANA_DATABASE:-}
+      - HANA_ENCRYPT=${HANA_ENCRYPT:-true}
+      - HANA_VALIDATE_CERT=${HANA_VALIDATE_CERT:-true}
+      
+      # Authentication settings
+      - AUTH_REQUIRED=${AUTH_REQUIRED:-false}
+      - JWT_SECRET=${JWT_SECRET:-}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-86400}
+      
+      # LangChain settings
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - VECTOR_DIMENSIONS=${VECTOR_DIMENSIONS:-1536}
+      - MAX_TOKENS=${MAX_TOKENS:-2048}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - langchain-hana-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles: ["api", "full"]
+
+  # Arrow Flight Service
+  arrow-flight:
+    image: ${DOCKER_REGISTRY:-ghcr.io}/${ORGANIZATION:-finsightdev}/langchain-hana-arrow-flight:${VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: .docker/services/arrow-flight/Dockerfile
+      args:
+        VERSION: ${VERSION:-1.0.0}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        TARGETPLATFORM: ${TARGETPLATFORM:-linux/amd64}
+    container_name: langchain-hana-arrow-flight
+    restart: unless-stopped
+    ports:
+      - "${ARROW_API_PORT:-8001}:8000"
+      - "${ARROW_FLIGHT_PORT:-8816}:8815"
+    volumes:
+      - arrow-flight-logs:/app/logs
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENABLE_CORS=${ENABLE_CORS:-true}
+      - FLIGHT_HOST=0.0.0.0
+      - FLIGHT_PORT=8815
+      - ALLOW_ORIGINS=${ALLOW_ORIGINS:-http://localhost:3000,http://frontend:3000}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - langchain-hana-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles: ["arrow-flight", "full"]
+
+  # Frontend Service
+  frontend:
+    image: ${DOCKER_REGISTRY:-ghcr.io}/${ORGANIZATION:-finsightdev}/langchain-hana-frontend:${VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: .docker/services/frontend/Dockerfile
+      args:
+        VERSION: ${VERSION:-1.0.0}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        TARGETPLATFORM: ${TARGETPLATFORM:-linux/amd64}
+        API_URL: ${API_URL:-http://api:8000}
+    container_name: langchain-hana-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    environment:
+      - API_URL=${API_URL:-http://localhost:8000}
+      - NODE_ENV=${NODE_ENV:-production}
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - langchain-hana-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles: ["frontend", "full"]
+
+  # Prometheus for metrics collection (optional)
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-latest}
+    container_name: langchain-hana-prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ../.docker/config/prometheus:/etc/prometheus
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - langchain-hana-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles: ["monitoring", "full"]
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-10.0.3}
+    container_name: langchain-hana-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ../.docker/config/grafana:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - langchain-hana-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles: ["monitoring", "full"]
+
+# Persistent volumes
+volumes:
+  api-cache:
+    driver: local
+  api-logs:
+    driver: local
+  arrow-flight-logs:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+# Networks
+networks:
+  langchain-hana-network:
+    driver: bridge

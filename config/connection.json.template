@@ -1,0 +1,6 @@
+{
+  "address": "your-hana-instance.hanacloud.ondemand.com",
+  "port": 443,
+  "user": "DBADMIN",
+  "password": "your-password"
+}

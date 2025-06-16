@@ -4,3 +4,8 @@ uvicorn==0.27.1
 python-dotenv==1.0.1
 pydantic==2.6.1
 numpy==1.24.3
+
+# Arrow Flight dependencies
+pyarrow==14.0.2
+pandas==2.1.4
+scikit-learn==1.4.0

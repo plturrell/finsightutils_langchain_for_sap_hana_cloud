@@ -1,0 +1,58 @@
+FROM python:3.10-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1 \
+    PIP_NO_CACHE_DIR=off \
+    PIP_DISABLE_PIP_VERSION_CHECK=on
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    libgomp1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first to leverage Docker cache
+COPY requirements.txt .
+COPY requirements-secure.txt .
+
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-secure.txt
+
+# Install additional dependencies for financial embeddings
+RUN pip install --no-cache-dir sentence-transformers>=2.2.0 \
+    torch>=2.0.0 \
+    pandas>=1.5.0 \
+    matplotlib>=3.6.0 \
+    seaborn>=0.12.0 \
+    scikit-learn>=1.1.0 \
+    fastapi>=0.95.0 \
+    uvicorn>=0.22.0 \
+    pydantic>=1.10.0
+
+# Copy the application code
+COPY . .
+
+# Make sure the langchain_hana package is installed in development mode
+RUN pip install -e .
+
+# Create a directory for data storage
+RUN mkdir -p /app/data
+
+# Expose the port the app runs on
+EXPOSE 8000
+
+# Create a non-root user and switch to it
+RUN useradd -m -u 1000 user
+USER user
+
+# Run the application
+CMD ["uvicorn", "examples.financial_api:app", "--host", "0.0.0.0", "--port", "8000"]

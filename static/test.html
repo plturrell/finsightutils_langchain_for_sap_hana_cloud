@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAP HANA LangChain Integration Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #0066cc;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background: #0052a3;
+        }
+        .api-url {
+            padding: 8px;
+            width: 300px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        pre {
+            background: #f1f1f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        .success {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .warning {
+            color: #ffc107;
+        }
+        .endpoints {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .status-ok {
+            background-color: #28a745;
+        }
+        .status-error {
+            background-color: #dc3545;
+        }
+        .status-pending {
+            background-color: #ffc107;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <h1>SAP HANA LangChain Integration Test</h1>
+    
+    <div class="card">
+        <h2>API Connection Settings</h2>
+        <input type="text" id="apiUrl" class="api-url" placeholder="API URL (e.g., http://localhost:8000)" value="http://localhost:8000">
+        <button onclick="testApiConnection()">Test Connection</button>
+        <div id="connectionStatus"></div>
+    </div>
+    
+    <div class="card">
+        <h2>Basic API Endpoints</h2>
+        <div class="endpoints">
+            <button onclick="testEndpoint('/')">Root</button>
+            <button onclick="testEndpoint('/health')">Health</button>
+            <button onclick="testEndpoint('/health/ping')">Ping</button>
+            <button onclick="testEndpoint('/health/status')">Status</button>
+            <button onclick="testEndpoint('/gpu/info')">GPU Info</button>
+        </div>
+        <div id="endpointResults"></div>
+    </div>
+    
+    <div class="card">
+        <h2>Vector Operations</h2>
+        <button onclick="testSimpleQuery()">Test Simple Query</button>
+        <div id="vectorResults"></div>
+    </div>
+    
+    <div class="card">
+        <h2>Endpoint Status Summary</h2>
+        <table id="endpointSummary">
+            <thead>
+                <tr>
+                    <th>Endpoint</th>
+                    <th>Status</th>
+                    <th>Response Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Will be populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+    
+    <script>
+        // Store endpoint results
+        const endpointStatus = {};
+        
+        // Base API URL
+        function getApiUrl() {
+            return document.getElementById('apiUrl').value.trim();
+        }
+        
+        // Test API connection
+        async function testApiConnection() {
+            const connectionStatusEl = document.getElementById('connectionStatus');
+            connectionStatusEl.innerHTML = 'Testing connection...';
+            
+            try {
+                const startTime = performance.now();
+                const response = await fetch(`${getApiUrl()}/health`, { timeout: 5000 });
+                const endTime = performance.now();
+                const responseTime = (endTime - startTime).toFixed(2);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    connectionStatusEl.innerHTML = `
+                        <p class="success">
+                            <span class="status-indicator status-ok"></span>
+                            Connected successfully! Response time: ${responseTime}ms
+                        </p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    connectionStatusEl.innerHTML = `
+                        <p class="error">
+                            <span class="status-indicator status-error"></span>
+                            Connection failed with status: ${response.status} ${response.statusText}
+                        </p>
+                    `;
+                }
+            } catch (error) {
+                connectionStatusEl.innerHTML = `
+                    <p class="error">
+                        <span class="status-indicator status-error"></span>
+                        Connection failed: ${error.message}
+                    </p>
+                `;
+            }
+        }
+        
+        // Test specific endpoint
+        async function testEndpoint(endpoint) {
+            const resultsEl = document.getElementById('endpointResults');
+            resultsEl.innerHTML = `Testing ${endpoint}...`;
+            
+            try {
+                const startTime = performance.now();
+                const response = await fetch(`${getApiUrl()}${endpoint}`);
+                const endTime = performance.now();
+                const responseTime = (endTime - startTime).toFixed(2);
+                
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = await response.text();
+                }
+                
+                if (response.ok) {
+                    resultsEl.innerHTML = `
+                        <p class="success">
+                            <span class="status-indicator status-ok"></span>
+                            Endpoint ${endpoint} is available. Response time: ${responseTime}ms
+                        </p>
+                        <pre>${typeof data === 'object' ? JSON.stringify(data, null, 2) : data}</pre>
+                    `;
+                    
+                    // Update status record
+                    endpointStatus[endpoint] = { 
+                        status: 'OK', 
+                        responseTime: `${responseTime}ms`,
+                        timestamp: new Date().toISOString()
+                    };
+                } else {
+                    resultsEl.innerHTML = `
+                        <p class="error">
+                            <span class="status-indicator status-error"></span>
+                            Endpoint ${endpoint} returned error: ${response.status} ${response.statusText}
+                        </p>
+                        <pre>${typeof data === 'object' ? JSON.stringify(data, null, 2) : data}</pre>
+                    `;
+                    
+                    // Update status record
+                    endpointStatus[endpoint] = { 
+                        status: 'Error', 
+                        responseTime: `${responseTime}ms`,
+                        timestamp: new Date().toISOString()
+                    };
+                }
+            } catch (error) {
+                resultsEl.innerHTML = `
+                    <p class="error">
+                        <span class="status-indicator status-error"></span>
+                        Failed to test endpoint ${endpoint}: ${error.message}
+                    </p>
+                `;
+                
+                // Update status record
+                endpointStatus[endpoint] = { 
+                    status: 'Failed', 
+                    responseTime: 'N/A',
+                    timestamp: new Date().toISOString()
+                };
+            }
+            
+            // Update summary table
+            updateEndpointSummary();
+        }
+        
+        // Test a simple query
+        async function testSimpleQuery() {
+            const vectorResultsEl = document.getElementById('vectorResults');
+            vectorResultsEl.innerHTML = 'Testing simple query...';
+            
+            try {
+                const queryData = {
+                    query: "What is SAP HANA Cloud?",
+                    k: 2
+                };
+                
+                const startTime = performance.now();
+                const response = await fetch(`${getApiUrl()}/query`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(queryData)
+                });
+                const endTime = performance.now();
+                const responseTime = (endTime - startTime).toFixed(2);
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    vectorResultsEl.innerHTML = `
+                        <p class="success">
+                            <span class="status-indicator status-ok"></span>
+                            Query executed successfully! Response time: ${responseTime}ms
+                        </p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                    
+                    // Update status record
+                    endpointStatus['/query'] = { 
+                        status: 'OK', 
+                        responseTime: `${responseTime}ms`,
+                        timestamp: new Date().toISOString()
+                    };
+                } else {
+                    vectorResultsEl.innerHTML = `
+                        <p class="error">
+                            <span class="status-indicator status-error"></span>
+                            Query failed with status: ${response.status} ${response.statusText}
+                        </p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                    
+                    // Update status record
+                    endpointStatus['/query'] = { 
+                        status: 'Error', 
+                        responseTime: `${responseTime}ms`,
+                        timestamp: new Date().toISOString()
+                    };
+                }
+            } catch (error) {
+                vectorResultsEl.innerHTML = `
+                    <p class="error">
+                        <span class="status-indicator status-error"></span>
+                        Query execution failed: ${error.message}
+                    </p>
+                `;
+                
+                // Update status record
+                endpointStatus['/query'] = { 
+                    status: 'Failed', 
+                    responseTime: 'N/A',
+                    timestamp: new Date().toISOString()
+                };
+            }
+            
+            // Update summary table
+            updateEndpointSummary();
+        }
+        
+        // Update the endpoint summary table
+        function updateEndpointSummary() {
+            const summaryTable = document.getElementById('endpointSummary').getElementsByTagName('tbody')[0];
+            summaryTable.innerHTML = '';
+            
+            Object.entries(endpointStatus).forEach(([endpoint, info]) => {
+                const row = summaryTable.insertRow();
+                
+                const endpointCell = row.insertCell(0);
+                endpointCell.textContent = endpoint;
+                
+                const statusCell = row.insertCell(1);
+                let statusHtml = '';
+                
+                if (info.status === 'OK') {
+                    statusHtml = `<span class="status-indicator status-ok"></span>${info.status}`;
+                    statusCell.classList.add('success');
+                } else if (info.status === 'Error') {
+                    statusHtml = `<span class="status-indicator status-error"></span>${info.status}`;
+                    statusCell.classList.add('error');
+                } else {
+                    statusHtml = `<span class="status-indicator status-pending"></span>${info.status}`;
+                    statusCell.classList.add('warning');
+                }
+                
+                statusCell.innerHTML = statusHtml;
+                
+                const timeCell = row.insertCell(2);
+                timeCell.textContent = info.responseTime;
+            });
+        }
+        
+        // Initial connection test on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Wait a second for everything to initialize
+            setTimeout(testApiConnection, 1000);
+        });
+    </script>
+</body>
+</html>

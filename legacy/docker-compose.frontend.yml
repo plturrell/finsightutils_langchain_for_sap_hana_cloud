@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # Arrow Flight API backend
+  backend:
+    image: finsightintelligence/finsight_utils_langchain_hana:minimal-secure
+    container_name: langchain-hana-backend
+    ports:
+      - "8000:8000"  # API port
+      - "8815:8815"  # Arrow Flight port
+    environment:
+      - FLIGHT_HOST=0.0.0.0
+      - FLIGHT_PORT=8815
+      - FLIGHT_AUTO_START=true
+      - TEST_MODE=true  # For testing without actual HANA database
+    networks:
+      - langchain-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # React frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: langchain-hana-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - langchain-network
+
+networks:
+  langchain-network:
+    driver: bridge

@@ -8,9 +8,18 @@ import json
 import logging
 import random
 import struct
+import sys
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from unittest.mock import MagicMock
+
+# Mock GPU utilities
+sys.modules['gpu_utils'] = MagicMock()
+sys.modules['tensorrt_utils'] = MagicMock()
+
+# Set environment variables for test mode
+os.environ["HANA_MOCK_ENABLED"] = "true"
+os.environ["GPU_MOCK_ENABLED"] = "true"
 
 logger = logging.getLogger(__name__)
 

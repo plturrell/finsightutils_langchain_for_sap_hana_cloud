@@ -1,0 +1,67 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies with updated versions
+RUN pip install --no-cache-dir fastapi==0.115.12 uvicorn==0.34.3 pyarrow==17.0.0 && \
+    pip install --no-cache-dir setuptools==78.1.1 && \
+    pip install --no-cache-dir pip==23.3.1
+
+# Create a simple API file
+RUN mkdir -p /app/api
+
+# Create a simple app with health check
+RUN echo 'from fastapi import FastAPI\n\
+import time\n\
+import os\n\
+\n\
+app = FastAPI(title="Arrow Flight API")\n\
+\n\
+@app.get("/")\n\
+async def root():\n\
+    return {\n\
+        "message": "SAP HANA Cloud LangChain Integration with Arrow Flight",\n\
+        "version": "1.0.0"\n\
+    }\n\
+\n\
+@app.get("/health")\n\
+async def health():\n\
+    return {\n\
+        "status": "ok",\n\
+        "timestamp": time.time(),\n\
+        "version": "1.0.0",\n\
+        "arrow_flight": True\n\
+    }\n\
+\n\
+@app.get("/flight/info")\n\
+async def flight_info():\n\
+    return {\n\
+        "status": "available",\n\
+        "host": os.environ.get("FLIGHT_HOST", "0.0.0.0"),\n\
+        "port": int(os.environ.get("FLIGHT_PORT", "8815")),\n\
+        "auto_start": os.environ.get("FLIGHT_AUTO_START", "true") == "true"\n\
+    }' > /app/api/app.py
+
+# Create a non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser && \
+    chown -R appuser:appuser /app
+
+# Expose the API port
+EXPOSE 8000
+EXPOSE 8815
+
+# Switch to non-root user
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Start the API
+CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]

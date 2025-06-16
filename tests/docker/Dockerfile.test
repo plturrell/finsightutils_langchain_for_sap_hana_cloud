@@ -1,0 +1,36 @@
+FROM python:3.10-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy only the necessary files first
+COPY api/requirements.txt /app/requirements.txt
+COPY tests/requirements.txt /app/tests/requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r tests/requirements.txt && \
+    pip install --no-cache-dir psutil pytest
+
+# Copy application code and tests
+COPY api/ /app/api/
+COPY tests/ /app/tests/
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data
+
+# Set working directory for tests
+WORKDIR /app
+
+# Set default command to run tests
+CMD ["python", "-m", "pytest", "tests/test_embedding_simple.py", "-v"]

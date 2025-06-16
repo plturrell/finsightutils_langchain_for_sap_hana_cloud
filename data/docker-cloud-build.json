@@ -1,0 +1,10 @@
+{
+  "context": ".",
+  "dockerfile": "Dockerfile.secure",
+  "tags": ["finsightintelligence/finsight_utils_langchain_hana:cpu-secure", "finsightintelligence/finsight_utils_langchain_hana:cpu-secure-20250613"],
+  "platforms": ["linux/amd64"],
+  "buildArgs": {
+    "FORCE_CPU": "1",
+    "INSTALL_GPU": "false"
+  }
+}

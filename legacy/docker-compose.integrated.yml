@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # API service
+  api:
+    image: ${REPOSITORY:-finsightintelligence/finsight_utils_langchain_hana}:${API_TAG:-cpu-secure}
+    container_name: langchain-hana-api
+    ports:
+      - "8000:8000"
+      - "8815:8815"  # Arrow Flight port
+    environment:
+      - FLIGHT_HOST=0.0.0.0
+      - FLIGHT_PORT=8815
+      - FLIGHT_AUTO_START=true
+      - TEST_MODE=${TEST_MODE:-true}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - ./config:/app/config:ro
+    restart: unless-stopped
+
+  # Frontend service
+  frontend:
+    image: ${REPOSITORY:-finsightintelligence/finsight_utils_langchain_hana}-frontend:${FRONTEND_TAG:-latest}
+    container_name: langchain-hana-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # Monitoring container (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: langchain-hana-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus:/etc/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - api
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Visualization container (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: langchain-hana-grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./config/grafana:/etc/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+networks:
+  default:
+    name: langchain-hana-network

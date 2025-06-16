@@ -1,0 +1,22 @@
+services:
+  api:
+    # Use NVIDIA PyTorch image directly
+    image: nvcr.io/nvidia/pytorch:23.12-py3
+    container_name: sap-hana-langchain-api-nvidia
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../api:/app
+    working_dir: /app
+    environment:
+      - PYTHONPATH=/app
+    # Simple command to keep container running while we troubleshoot
+    command: >
+      sh -c "echo 'Starting minimal container for troubleshooting' &&
+             tail -f /dev/null"
+    networks:
+      - nvidia-network
+
+networks:
+  nvidia-network:
+    name: nvidia-network

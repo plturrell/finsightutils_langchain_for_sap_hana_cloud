@@ -39,7 +39,6 @@ from langchain_core.runnables.config import run_in_executor
 from langchain_core.vectorstores import VectorStore
 from langchain_core.vectorstores.utils import maximal_marginal_relevance
 
-from langchain_hana.embeddings import HanaInternalEmbeddings
 from langchain_hana.error_utils import handle_database_error
 from langchain_hana.query_constructors import (
     CONTAINS_OPERATOR,
@@ -215,6 +214,8 @@ class HanaDB(VectorStore):
         """
         self.embedding = embedding
         # Decide whether to use internal or external embeddings
+        # Import here to avoid circular imports
+        from langchain_hana.embeddings import HanaInternalEmbeddings
         if isinstance(embedding, HanaInternalEmbeddings):
             # Internal embeddings - use SAP HANA's VECTOR_EMBEDDING function
             self.use_internal_embeddings = True
@@ -1222,6 +1223,8 @@ class HanaDB(VectorStore):
             ```
         """
         # Check if the embedding instance is of the correct type
+        # Import here to avoid circular imports
+        from langchain_hana.embeddings import HanaInternalEmbeddings
         if not isinstance(self.embedding, HanaInternalEmbeddings):
             raise TypeError(
                 "self.embedding must be an instance of "

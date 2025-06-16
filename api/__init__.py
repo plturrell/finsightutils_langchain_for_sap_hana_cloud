@@ -7,38 +7,46 @@ optimized for GPU acceleration and enterprise deployments.
 
 from api.version import __version__
 
-# Expose key components at the package level
-from api.embeddings import (
-    EmbeddingProvider,
-    TensorRTEmbedding,
-    MultiGPUEmbedding,
-    EnhancedTensorRTEmbedding
-)
+# For the simplified Arrow Flight app, we skip the regular imports
+# to avoid dependency issues in the container
+try:
+    # Only import if not in Arrow Flight mode
+    if not __name__ == "api.simplified_app":
+        # Expose key components at the package level
+        from api.embeddings import (
+            EmbeddingProvider,
+            TensorRTEmbedding,
+            MultiGPUEmbedding,
+            EnhancedTensorRTEmbedding
+        )
 
-from api.services import (
-    APIService,
-    VectorService,
-    EmbeddingService,
-    DeveloperService
-)
+        from api.services import (
+            APIService,
+            VectorService,
+            EmbeddingService,
+            DeveloperService
+        )
 
-from api.models import (
-    EmbeddingRequest,
-    EmbeddingResponse,
-    VectorStoreRequest,
-    VectorStoreResponse,
-    HealthResponse
-)
+        from api.models import (
+            EmbeddingRequest,
+            EmbeddingResponse,
+            VectorStoreRequest,
+            VectorStoreResponse,
+            HealthResponse
+        )
 
-from api.utils import (
-    handle_error,
-    format_error,
-    ErrorContext,
-    TimeoutManager
-)
+        from api.utils import (
+            handle_error,
+            format_error,
+            ErrorContext,
+            TimeoutManager
+        )
 
-# Import main application and Vercel handler
-from api.core import app, handler
+        # Import main application and Vercel handler
+        from api.core import app, handler
+except ImportError:
+    # In case of import errors (for the simplified app), we continue without these imports
+    pass
 
 __all__ = [
     "__version__",

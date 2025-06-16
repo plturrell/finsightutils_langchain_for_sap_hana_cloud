@@ -10,10 +10,10 @@ from langchain_core.embeddings import Embeddings
 from langchain_hana import HanaDB, HanaInternalEmbeddings
 from langchain_hana.utils import DistanceStrategy
 
-from config import config
-from models import DocumentModel, DocumentResponse
-import gpu_utils
-from embeddings import GPUAcceleratedEmbeddings, GPUHybridEmbeddings
+from api.config import config
+from api.models.models import DocumentModel, DocumentResponse
+from api.gpu import gpu_utils
+from api.embeddings.embeddings import GPUAcceleratedEmbeddings, GPUHybridEmbeddings
 
 logger = logging.getLogger(__name__)
 
@@ -297,3 +297,24 @@ class VectorStoreService:
         result = self.vectorstore.delete(filter=filter)
         logger.info("Successfully deleted documents")
         return result
+
+
+# Add aliases to match what's expected in the import statements
+VectorService = VectorStoreService
+
+
+class APIService:
+    """Service class for API operations."""
+    
+    def __init__(self):
+        """Initialize the API service."""
+        logger.info("Initializing APIService in CPU-only mode")
+
+
+class EmbeddingService:
+    """Service class for embedding operations."""
+    
+    def __init__(self, embedding_model=None):
+        """Initialize the embedding service."""
+        logger.info("Initializing EmbeddingService in CPU-only mode")
+        self.embedding_model = embedding_model

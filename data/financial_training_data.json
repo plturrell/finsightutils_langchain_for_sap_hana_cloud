@@ -1,0 +1,52 @@
+[
+  {
+    "text1": "What are the latest earnings results for technology companies?",
+    "text2": "Q1 2025 Financial Results: XYZ Corporation reported revenue of $1.2 billion, up 15% year-over-year. EBITDA margin improved to 28.5% from 26.2% in the prior year period. The company generated $342 million in operating cash flow and returned $150 million to shareholders through dividends and share repurchases. Management raised full-year guidance, citing strong demand for its AI-enabled financial products.",
+    "score": 0.95
+  },
+  {
+    "text1": "What are the current market risks?",
+    "text2": "Market Risk Assessment: Global financial markets remain volatile due to persistent inflation and geopolitical tensions. The Federal Reserve is expected to maintain higher interest rates through Q3 2025, potentially impacting corporate debt refinancing. Credit spreads have widened by 35 basis points since January, indicating increased risk aversion. We recommend reducing exposure to high-yield debt and increasing allocation to quality equities with strong balance sheets.",
+    "score": 0.98
+  },
+  {
+    "text1": "Tell me about recent merger and acquisition activity",
+    "text2": "Merger Announcement: Alpha Financial Services (NYSE: ALPH) has entered into a definitive agreement to acquire Beta Payment Systems for $3.8 billion in cash and stock. The transaction represents a 40% premium to Beta's closing price and values the company at 12x forward EBITDA. The acquisition is expected to be immediately accretive to Alpha's earnings and will expand its payment processing capabilities in emerging markets. Regulatory approval is expected by Q4 2025.",
+    "score": 0.97
+  },
+  {
+    "text1": "What new regulations should financial institutions be aware of?",
+    "text2": "Regulatory Alert: The Financial Conduct Authority (FCA) has proposed new regulations requiring financial institutions to disclose climate-related financial risks in their annual reports. The proposal includes mandatory reporting of Scope 1, 2, and 3 emissions, climate risk scenario analysis, and transition plans aligned with the Paris Agreement. Non-compliance may result in significant penalties. The consultation period ends June 30, 2025, with implementation expected in fiscal year 2026.",
+    "score": 0.99
+  },
+  {
+    "text1": "What are some investment opportunities with positive outlook?",
+    "text2": "Investment Recommendation: We initiate coverage of Green Energy Finance (NASDAQ: GREF) with an Overweight rating and a price target of $78, representing 35% upside potential. GREF is uniquely positioned to benefit from the transition to sustainable energy with its innovative financing solutions for renewable projects. The company's proprietary risk assessment model has delivered a 40% lower default rate than industry averages. We project 25% annual revenue growth over the next three years, driven by expanded market share and favorable regulatory tailwinds.",
+    "score": 0.96
+  },
+  {
+    "text1": "How do interest rates affect corporate earnings?",
+    "text2": "Interest Rate Impact Analysis: Higher interest rates can significantly impact corporate earnings through increased borrowing costs, reduced consumer spending, and valuation pressures. For companies with variable-rate debt, each 100 basis point increase in rates typically reduces earnings by 3-8% depending on leverage ratios. Financial sector firms may benefit from higher net interest margins, while capital-intensive industries and growth stocks often experience more significant negative impacts.",
+    "score": 0.94
+  },
+  {
+    "text1": "What are the latest ESG investment trends?",
+    "text2": "ESG Investment Trends: Sustainable investing continues to gain momentum with global ESG assets projected to reach $50 trillion by 2025, representing over one-third of total assets under management. The trend is shifting from negative screening to impact investing and thematic approaches focused on climate transition, biodiversity, and social equality. Regulatory frameworks like the EU Taxonomy and SFDR are driving standardization, while data quality and greenwashing concerns remain key challenges for investors.",
+    "score": 0.93
+  },
+  {
+    "text1": "How are financial institutions adapting to digital currencies?",
+    "text2": "Digital Currency Adaptation: Financial institutions are increasingly integrating digital currencies into their strategic roadmaps, with 85% of central banks now actively researching or developing CBDCs. Commercial banks are developing custody solutions, trading desks, and settlement systems compatible with both traditional and digital assets. Regulatory uncertainty remains a key challenge, particularly regarding AML/KYC requirements, cross-border transactions, and capital treatment of crypto assets on balance sheets.",
+    "score": 0.91
+  },
+  {
+    "text1": "What are the key financial metrics for evaluating tech stocks?",
+    "text2": "Tech Stock Evaluation Framework: When analyzing technology companies, focus on revenue growth rate, gross margin trends, customer acquisition costs (CAC), customer lifetime value (LTV), net dollar retention rate, and rule of 40 (growth rate + profit margin). For SaaS companies specifically, ARR growth, churn rates, and LTV/CAC ratios exceeding 3x indicate sustainable business models. Cash burn relative to market opportunity and path to profitability become increasingly important in higher interest rate environments.",
+    "score": 0.92
+  },
+  {
+    "text1": "How do supply chain disruptions impact financial performance?",
+    "text2": "Supply Chain Financial Impact Analysis: Supply chain disruptions typically reduce corporate EBITDA by 30-50% during affected periods through multiple mechanisms: production delays, expedited shipping costs, inventory write-downs, and lost sales opportunities. Companies with vertically integrated operations, geographically diversified suppliers, and sophisticated inventory management systems demonstrate 40-60% lower earnings volatility during disruption events. Financial hedging strategies and business interruption insurance can further mitigate impacts on shareholder returns.",
+    "score": 0.90
+  }
+]

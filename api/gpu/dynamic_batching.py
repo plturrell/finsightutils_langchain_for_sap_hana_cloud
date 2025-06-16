@@ -381,6 +381,86 @@ class DynamicBatchSizer:
 _batch_sizers = {}
 
 
+class DynamicBatcher:
+    """
+    Dynamic batching implementation for GPU processing.
+    
+    This class handles batching of items for GPU processing to maximize throughput
+    while managing GPU memory efficiently.
+    """
+    
+    def __init__(self, batch_size: int = 32):
+        """
+        Initialize the dynamic batcher.
+        
+        Args:
+            batch_size: Initial batch size to use.
+        """
+        self.batch_sizer = DynamicBatchSizer(initial_batch_size=batch_size)
+        self.current_batch_size = batch_size
+    
+    def get_optimal_batch_size(self, items, device_name="cuda:0"):
+        """
+        Get the optimal batch size for the current items and device.
+        
+        Args:
+            items: List of items to process.
+            device_name: Device to use for processing.
+            
+        Returns:
+            Optimal batch size.
+        """
+        return self.batch_sizer.calculate_optimal_batch_size(items, device_name)
+    
+    def process_batch(self, items, processing_fn, device_name="cuda:0"):
+        """
+        Process a batch of items using the provided processing function.
+        
+        Args:
+            items: List of items to process.
+            processing_fn: Function to process the items.
+            device_name: Device to use for processing.
+            
+        Returns:
+            Results from processing function.
+        """
+        # Get optimal batch size
+        batch_size = self.get_optimal_batch_size(items, device_name)
+        self.current_batch_size = batch_size
+        
+        # Process in batches
+        results = []
+        for i in range(0, len(items), batch_size):
+            batch = items[i:i + batch_size]
+            batch_results = processing_fn(batch)
+            results.extend(batch_results)
+        
+        # Update batch size based on performance
+        self.batch_sizer.update(items, device_name)
+        
+        return results
+
+
+def calculate_optimal_batch_size(items, device_name="cuda:0", item_type=None, initial_batch_size=32):
+    """
+    Calculate the optimal batch size for processing items on the specified device.
+    
+    This is a standalone helper function that creates a temporary DynamicBatchSizer
+    to calculate the optimal batch size.
+    
+    Args:
+        items: List of items to process.
+        device_name: Device to use for processing.
+        item_type: Optional string identifying the item type.
+        initial_batch_size: Initial batch size to start with.
+        
+    Returns:
+        Optimal batch size.
+    """
+    batch_sizer = DynamicBatchSizer(initial_batch_size=initial_batch_size)
+    return batch_sizer.calculate_optimal_batch_size(items, device_name, item_type)
+
+
 def get_batch_sizer(name: str) -> DynamicBatchSizer:
     """
     Get a named batch sizer instance.

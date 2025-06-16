@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # Unified service with both API and Frontend
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.unified
+    image: finsightintelligence/langchain-sap-hana:unified
+    container_name: langchain-hana-unified
+    ports:
+      - "8000:8000"  # API port
+      - "8815:8815"  # Arrow Flight port
+      - "3000:3000"  # Frontend port
+    environment:
+      - TEST_MODE=true
+      - ENABLE_CORS=true
+      - LOG_LEVEL=INFO
+      - FLIGHT_AUTO_START=true
+      - FLIGHT_HOST=0.0.0.0
+      - FLIGHT_PORT=8815
+      - REACT_APP_API_URL=http://localhost:8000
+    volumes:
+      - ./cache:/app/cache  # Persistent cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped

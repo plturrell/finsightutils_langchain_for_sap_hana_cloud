@@ -1,0 +1,58 @@
+FROM python:3.9-slim
+
+# Set environment variables
+ENV PYTHONFAULTHANDLER=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=random \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=100 \
+    POETRY_VERSION=1.4.2 \
+    FINETUNE_LOG_LEVEL=INFO \
+    FINETUNE_LOG_FILE=/app/logs/finetune.log
+
+# Set work directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install poetry
+RUN pip install --no-cache-dir "poetry==$POETRY_VERSION"
+
+# Copy poetry configuration
+COPY pyproject.toml poetry.lock* /app/
+
+# Configure poetry to not use virtualenvs
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi --no-dev
+
+# Install additional dependencies for fine-tuning
+RUN pip install --no-cache-dir \
+    sentence-transformers>=2.2.0 \
+    numpy>=1.23.0 \
+    torch>=1.13.0 \
+    transformers>=4.25.0 \
+    docopt>=0.6.2
+
+# Create required directories
+RUN mkdir -p /app/models /app/data /app/logs /app/fine_tuned_models
+
+# Copy application code
+COPY finesse /app/finesse
+COPY finetune_fin_e5.py /app/
+COPY run_fin_e5.sh /app/
+COPY langchain_hana /app/langchain_hana/
+
+# Make scripts executable
+RUN chmod +x /app/finesse /app/run_fin_e5.sh
+
+# Default command
+ENTRYPOINT ["./finesse"]
+CMD ["--help"]

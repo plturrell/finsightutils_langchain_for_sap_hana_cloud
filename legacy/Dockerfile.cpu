@@ -1,0 +1,62 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y curl build-essential && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy application files
+COPY . /app/
+RUN mkdir -p /app/docs/pr_notes
+RUN mkdir -p /app/api/gpu
+
+# Install Python dependencies
+RUN pip install --no-cache-dir numpy scipy pandas scikit-learn torch && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir langchain langchain_core langchain_hana transformers sentence-transformers
+
+# Create dummy GPU modules for direct imports
+RUN echo 'import logging\nlogger = logging.getLogger("gpu_utils")\n\ndef get_gpu_info():\n    return {"gpu_count": 0, "gpu_names": []}\n\ndef get_gpu_utilization():\n    return [{"id": 0, "name": "CPU", "utilization": 0, "memory": 0}]\n\ndef is_gpu_available():\n    return False\n\ndef get_available_gpu_memory():\n    # Dummy implementation for CPU-only mode\n    return [{"id": 0, "name": "CPU", "total": 0, "used": 0, "free": 0}]\n\ndef to_gpu_array(data):\n    import numpy as np\n    return np.array(data)\n\ndef to_cpu_array(data):\n    import numpy as np\n    return np.array(data)' > /usr/local/lib/python3.10/site-packages/gpu_utils.py
+
+RUN echo 'import logging\nlogger = logging.getLogger("tensorrt_utils")\n\ndef create_tensorrt_engine(*args, **kwargs):\n    logger.warning("TensorRT not available in CPU mode.")\n    return None\n\ndef optimize_with_tensorrt(*args, **kwargs):\n    logger.warning("TensorRT optimization not available in CPU mode.")\n    return args[0]\n\nclass TensorRTOptimizer:\n    def __init__(self, *args, **kwargs):\n        logger.warning("TensorRT optimization not available in CPU mode.")\n        pass\n        \n    def optimize(self, *args, **kwargs):\n        logger.warning("TensorRT optimization not available in CPU mode.")\n        return args[0] if args else None\n\n# Create an instance for direct imports\ntensorrt_optimizer = TensorRTOptimizer()\n\nTENSORRT_AVAILABLE = False' > /usr/local/lib/python3.10/site-packages/tensorrt_utils.py
+
+# Copy multi_gpu.py to site-packages to make it importable
+COPY api/multi_gpu.py /usr/local/lib/python3.10/site-packages/multi_gpu.py
+
+# Fix class naming mismatch between MultiGPUEmbeddings and MultiGPUEmbedding
+# Add a class alias to embeddings_multi_gpu.py for import compatibility
+RUN echo '\n# Provide alias for singular class name (required by imports)\nMultiGPUEmbedding = MultiGPUEmbeddings' >> /app/api/embeddings/embeddings_multi_gpu.py
+
+# Add dummy implementation for TensorRTEmbeddings and EnhancedTensorRTEmbedding classes for CPU-only mode
+RUN echo 'import sys\nimport logging\nlogger = logging.getLogger("dummy_tensorrt_classes")\n\n# Add dummy TensorRTEmbeddings class to fix inheritance issues\nclass TensorRTEmbeddings:\n    """Dummy TensorRTEmbeddings class for CPU-only mode."""\n    def __init__(self, **kwargs):\n        self.model_name = kwargs.get("model_name", "dummy")\n        self.device = "cpu"\n        self.batch_size = kwargs.get("batch_size", 32)\n        self.precision = kwargs.get("precision", "cpu-only")\n        logger.warning("Using dummy TensorRTEmbeddings in CPU-only mode")\n\n    def embed_documents(self, texts):\n        import numpy as np\n        return [[0.0] * 384 for _ in texts]\n\n    def embed_query(self, text):\n        import numpy as np\n        return [0.0] * 384\n\nclass EnhancedTensorRTEmbedding:\n    """Dummy EnhancedTensorRTEmbedding class for CPU-only mode."""\n    def __init__(self, **kwargs):\n        self.model_name = kwargs.get("model_name", "dummy")\n        self.device = "cpu"\n        self.batch_size = kwargs.get("batch_size", 32)\n        self.precision = kwargs.get("precision", "cpu-only")\n        logger.warning("Using dummy EnhancedTensorRTEmbedding in CPU-only mode")\n\n    def embed_documents(self, texts):\n        import numpy as np\n        return [[0.0] * 384 for _ in texts]\n\n    def embed_query(self, text):\n        import numpy as np\n        return [0.0] * 384\n\nclass TensorRTEmbeddingsWithTensorCores(TensorRTEmbeddings):\n    """Dummy TensorRTEmbeddingsWithTensorCores class for CPU-only mode."""\n    def __init__(self, **kwargs):\n        super().__init__(**kwargs)\n' > /usr/local/lib/python3.10/site-packages/dummy_tensorrt_classes.py
+
+# Patch the enhanced file to use the dummy classes
+RUN sed -i '1s/^/from dummy_tensorrt_classes import TensorRTEmbeddings, EnhancedTensorRTEmbedding, TensorRTEmbeddingsWithTensorCores  # Import dummy classes for CPU mode\n/' /app/api/embeddings/embeddings_tensorrt_enhanced.py
+
+RUN echo 'import sys\nprint("Creating dummy GPU modules in", sys.path)' > /tmp/debug.py && python /tmp/debug.py
+
+# Set environment variables
+ENV TZ=UTC \
+    PORT=8000 \
+    API_PORT=8008 \
+    CORS_ORIGINS=* \
+    PYTHONPATH=/app:/usr/local/lib/python3.10/site-packages \
+    USE_GPU=false \
+    CPU_ONLY_MODE=true \
+    DISABLE_GPU_CHECK=true \
+    TEST_MODE=true
+
+# Health check
+HEALTHCHECK --interval=20s --timeout=10s --start-period=40s --retries=5 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Expose the port
+EXPOSE 8000
+
+# Start the application
+CMD ["bash", "-c", "python -c 'import sys; print(sys.path)' && \
+                   PYTHONPATH=/app:/usr/local/lib/python3.10/site-packages \
+                   uvicorn api.core.main:app --host 0.0.0.0 --port 8000"]

@@ -1,0 +1,32 @@
+services:
+  # Minimal API service with Arrow Flight support
+  api:
+    image: finsightintelligence/langchain-sap-hana:minimal-api
+    container_name: langchain-hana-minimal-api
+    ports:
+      - "8000:8000"  # API port
+      - "8815:8815"  # Arrow Flight port
+    environment:
+      - FLIGHT_HOST=0.0.0.0
+      - FLIGHT_PORT=8815
+      - FLIGHT_AUTO_START=true
+      - TEST_MODE=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Frontend service
+  frontend:
+    image: nginx:alpine
+    container_name: langchain-hana-frontend
+    ports:
+      - "3000:80"  # Frontend port
+    volumes:
+      - ./frontend-static:/usr/share/nginx/html
+    depends_on:
+      - api
+    restart: unless-stopped

@@ -1,0 +1,75 @@
+name: Docker Build Cloud CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Modified setup for handling large NVIDIA images
+      - name: Set up Docker Buildx with enhanced settings
+        uses: docker/setup-buildx-action@v2
+        with:
+          driver: cloud
+          driver-opts: |
+            image=moby/buildkit:v0.12.0
+            memory=8gb
+            cpu-quota=400000
+            
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Login to NVIDIA NGC for accessing base images
+      - name: Login to NVIDIA NGC
+        uses: docker/login-action@v2
+        with:
+          registry: nvcr.io
+          username: ${{ secrets.NGC_USERNAME }}
+          password: ${{ secrets.NGC_API_KEY }}
+          
+      # Prune Docker system to ensure clean slate
+      - name: Prune Docker system
+        run: docker system prune -af
+
+      # Build and push API image with optimized settings
+      - name: Build and push API image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./docker/Dockerfile.nvidia
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/langchain-hana-nvidia:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/langchain-hana-nvidia:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/langchain-hana-nvidia:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/langchain-hana-nvidia:buildcache,mode=max
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE=nvcr.io/nvidia/pytorch:23.12-py3
+          # Add resource limit parameters
+          outputs: type=registry,compression=gzip,compression-level=9,force-compression=true
+          allow: network.host,security.insecure
+
+      # Build and push Frontend image
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/langchain-hana-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/langchain-hana-frontend:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/langchain-hana-frontend:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/langchain-hana-frontend:buildcache,mode=max
+          platforms: linux/amd64

@@ -1,0 +1,94 @@
+name: Docker Image Validation
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'  # Run every Monday at midnight
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to validate (e.g., cpu-secure)'
+        required: true
+        default: 'cpu-secure'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up environment
+        run: |
+          # Use input tag or default to cpu-secure
+          TAG="${{ github.event.inputs.image_tag || 'cpu-secure' }}"
+          echo "IMAGE_TAG=${TAG}" >> $GITHUB_ENV
+          echo "REPOSITORY=finsightintelligence/finsight_utils_langchain_hana" >> $GITHUB_ENV
+
+      - name: Pull Docker image
+        run: docker pull ${{ env.REPOSITORY }}:${{ env.IMAGE_TAG }}
+
+      - name: Run image
+        run: |
+          docker run -d -p 8000:8000 --name test-container ${{ env.REPOSITORY }}:${{ env.IMAGE_TAG }}
+          sleep 30  # Wait for container to start
+
+      - name: Test health endpoints
+        run: |
+          # Test /health endpoint
+          HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health)
+          if [ "$HEALTH_STATUS" = "200" ]; then
+            echo "✅ /health endpoint: OK (Status $HEALTH_STATUS)"
+            # Show health response
+            curl -s http://localhost:8000/health | jq .
+          else
+            echo "❌ /health endpoint: Failed (Status $HEALTH_STATUS)"
+            exit 1
+          fi
+          
+          # Test /health/ping endpoint
+          PING_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health/ping)
+          if [ "$PING_STATUS" = "200" ]; then
+            echo "✅ /health/ping endpoint: OK (Status $PING_STATUS)"
+            # Show ping response
+            curl -s http://localhost:8000/health/ping
+          else
+            echo "❌ /health/ping endpoint: Failed (Status $PING_STATUS)"
+            exit 1
+          fi
+
+      - name: Check GPU info (if applicable)
+        if: env.IMAGE_TAG == 'gpu-secure'
+        run: |
+          # Test GPU info endpoint
+          GPU_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/gpu/info)
+          if [ "$GPU_STATUS" = "200" ]; then
+            echo "✅ /gpu/info endpoint: OK (Status $GPU_STATUS)"
+            # Show GPU info
+            curl -s http://localhost:8000/gpu/info | jq .
+          else
+            echo "❌ /gpu/info endpoint: Failed (Status $GPU_STATUS)"
+            exit 1
+          fi
+
+      - name: Container logs
+        if: always()
+        run: docker logs test-container
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f test-container || true
+
+      - name: Send notification (on failure)
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Docker Image Validation Failed: ${{ env.IMAGE_TAG }}`,
+              body: `The validation for Docker image \`${{ env.REPOSITORY }}:${{ env.IMAGE_TAG }}\` has failed.
+              
+              Please check the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`
+            })

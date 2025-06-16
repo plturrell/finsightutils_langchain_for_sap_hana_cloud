@@ -3,8 +3,12 @@ Memory-optimized vector serialization for efficient transfer between GPU and SAP
 
 This module provides specialized functions for efficient vector serialization and deserialization,
 optimized for transferring embedding vectors between GPU memory and SAP HANA Cloud.
+
+It supports both custom binary serialization and Apache Arrow columnar format for
+high-performance data transfer.
 """
 
+import json
 import struct
 import logging
 import zlib
@@ -16,6 +20,12 @@ try:
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
+
+try:
+    import pyarrow as pa
+    HAS_ARROW = True
+except ImportError:
+    HAS_ARROW = False
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +265,11 @@ def get_vector_memory_usage(
     total_float16 = memory_float16 + total_overhead
     total_int8 = memory_int8 + total_overhead_int8
     
+    # Calculate Arrow format memory usage (estimate)
+    arrow_overhead = 64  # Rough estimate for Arrow batch metadata
+    arrow_memory_float32 = memory_float32 + arrow_overhead
+    arrow_memory_float16 = memory_float16 + arrow_overhead
+    
     # Current memory based on precision
     if precision == "float16":
         current_memory = total_float16
@@ -266,6 +281,7 @@ def get_vector_memory_usage(
     # Calculate savings percentages
     savings_float16 = (1 - (total_float16 / total_float32)) * 100 if total_float32 > 0 else 0
     savings_int8 = (1 - (total_int8 / total_float32)) * 100 if total_float32 > 0 else 0
+    savings_arrow = (1 - (arrow_memory_float32 / total_float32)) * 100 if total_float32 > 0 else 0
     
     return {
         "vector_dimension": vector_dimension,
@@ -276,9 +292,296 @@ def get_vector_memory_usage(
         "memory_float32_mb": total_float32 / (1024 * 1024),
         "memory_float16_mb": total_float16 / (1024 * 1024),
         "memory_int8_mb": total_int8 / (1024 * 1024),
+        "memory_arrow_float32_mb": arrow_memory_float32 / (1024 * 1024),
+        "memory_arrow_float16_mb": arrow_memory_float16 / (1024 * 1024),
         "savings_float16_vs_float32_percent": savings_float16,
         "savings_int8_vs_float32_percent": savings_int8,
+        "savings_arrow_vs_binary_percent": savings_arrow,
         "bytes_per_vector_float32": vector_dimension * bytes_per_float32 + overhead_per_vector,
         "bytes_per_vector_float16": vector_dimension * bytes_per_float16 + overhead_per_vector,
         "bytes_per_vector_int8": vector_dimension * bytes_per_int8 + overhead_per_vector + overhead_int8,
     }
+
+
+# Arrow serialization functions
+
+def vector_to_arrow_array(
+    vector: Union[List[float], np.ndarray, "torch.Tensor"],
+    precision: str = "float32",
+) -> "pa.Array":
+    """
+    Convert a vector to an Arrow Array.
+    
+    Args:
+        vector: Vector to convert
+        precision: Precision to use ("float32" or "float16")
+        
+    Returns:
+        PyArrow Array
+    """
+    if not HAS_ARROW:
+        raise ImportError(
+            "The pyarrow package is required for Arrow serialization. "
+            "Install it with 'pip install pyarrow'."
+        )
+    
+    # Convert input to numpy array
+    if HAS_TORCH and isinstance(vector, torch.Tensor):
+        # Move to CPU if on GPU
+        if vector.is_cuda:
+            vector = vector.cpu()
+        # Convert to numpy
+        vector_np = vector.detach().numpy()
+    elif isinstance(vector, np.ndarray):
+        vector_np = vector
+    else:
+        vector_np = np.array(vector, dtype=np.float32)
+    
+    # Ensure vector is flattened
+    vector_np = vector_np.reshape(-1)
+    
+    # Convert to requested precision
+    if precision == "float16":
+        vector_np = vector_np.astype(np.float16)
+        arrow_type = pa.float16()
+    else:  # float32
+        vector_np = vector_np.astype(np.float32)
+        arrow_type = pa.float32()
+    
+    # Create Arrow array
+    return pa.array(vector_np, type=arrow_type)
+
+
+def vectors_to_arrow_batch(
+    vectors: List[Union[List[float], np.ndarray, "torch.Tensor"]],
+    precision: str = "float32",
+    include_metadata: bool = False,
+    metadatas: Optional[List[Dict[str, Any]]] = None,
+    texts: Optional[List[str]] = None,
+    ids: Optional[List[str]] = None,
+) -> "pa.RecordBatch":
+    """
+    Convert a batch of vectors to an Arrow RecordBatch.
+    
+    Args:
+        vectors: List of vectors to convert
+        precision: Precision to use ("float32" or "float16")
+        include_metadata: Whether to include metadata columns
+        metadatas: Optional list of metadata dictionaries
+        texts: Optional list of text strings
+        ids: Optional list of IDs
+        
+    Returns:
+        PyArrow RecordBatch
+    """
+    if not HAS_ARROW:
+        raise ImportError(
+            "The pyarrow package is required for Arrow serialization. "
+            "Install it with 'pip install pyarrow'."
+        )
+    
+    if not vectors:
+        raise ValueError("Empty vector list provided")
+    
+    # Convert all vectors to numpy arrays
+    if HAS_TORCH and isinstance(vectors[0], torch.Tensor):
+        # Handle PyTorch tensors
+        vectors_np = np.vstack([
+            v.detach().cpu().numpy().reshape(1, -1) 
+            if v.dim() == 1 else v.detach().cpu().numpy() 
+            for v in vectors
+        ])
+    elif isinstance(vectors[0], np.ndarray):
+        # Handle numpy arrays
+        vectors_np = np.vstack([
+            v.reshape(1, -1) if v.ndim == 1 else v 
+            for v in vectors
+        ])
+    else:
+        # Handle lists
+        vectors_np = np.array(vectors, dtype=np.float32)
+    
+    # Get dimensions
+    num_vectors = len(vectors)
+    vector_dim = vectors_np.shape[1]
+    
+    # Convert to requested precision
+    if precision == "float16":
+        vectors_np = vectors_np.astype(np.float16)
+        arrow_type = pa.float16()
+    else:  # float32
+        vectors_np = vectors_np.astype(np.float32)
+        arrow_type = pa.float32()
+    
+    # Create a FixedSizeListArray for the vectors
+    flattened = pa.array(vectors_np.flatten(), type=arrow_type)
+    vectors_array = pa.FixedSizeListArray.from_arrays(flattened, vector_dim)
+    
+    # Prepare arrays dictionary
+    arrays = {"vector": vectors_array}
+    
+    # Add IDs if provided
+    if ids is not None:
+        arrays["id"] = pa.array(ids, type=pa.string())
+    
+    # Add texts if provided
+    if texts is not None:
+        arrays["text"] = pa.array(texts, type=pa.string())
+    
+    # Add metadata if requested
+    if include_metadata and metadatas is not None:
+        # Convert metadata dictionaries to JSON strings
+        metadata_jsons = [json.dumps(m) if m else "{}" for m in metadatas]
+        arrays["metadata"] = pa.array(metadata_jsons, type=pa.string())
+    
+    # Create RecordBatch
+    return pa.RecordBatch.from_arrays(
+        [arrays[name] for name in arrays],
+        names=list(arrays.keys())
+    )
+
+
+def arrow_batch_to_vectors(
+    batch: "pa.RecordBatch",
+    vector_column: str = "vector",
+) -> List[List[float]]:
+    """
+    Convert an Arrow RecordBatch to a list of vectors.
+    
+    Args:
+        batch: PyArrow RecordBatch
+        vector_column: Name of the vector column
+        
+    Returns:
+        List of vectors as lists of floats
+    """
+    if not HAS_ARROW:
+        raise ImportError(
+            "The pyarrow package is required for Arrow serialization. "
+            "Install it with 'pip install pyarrow'."
+        )
+    
+    # Check if vector column exists
+    if vector_column not in batch.schema.names:
+        raise ValueError(f"Vector column '{vector_column}' not found in RecordBatch")
+    
+    # Get vector column
+    vector_array = batch.column(batch.schema.get_field_index(vector_column))
+    
+    # Check if it's a FixedSizeListArray
+    if not isinstance(vector_array.type, pa.FixedSizeListType):
+        raise ValueError(f"Column '{vector_column}' is not a FixedSizeListArray")
+    
+    # Convert to numpy and then to list of lists
+    vector_np = vector_array.to_numpy()
+    return vector_np.tolist()
+
+
+def arrow_batch_to_documents(
+    batch: "pa.RecordBatch",
+    vector_column: str = "vector",
+    text_column: str = "text",
+    metadata_column: str = "metadata",
+    id_column: str = "id",
+) -> Tuple[List[List[float]], List[str], List[Dict[str, Any]], List[str]]:
+    """
+    Convert an Arrow RecordBatch to vectors, texts, metadata, and IDs.
+    
+    Args:
+        batch: PyArrow RecordBatch
+        vector_column: Name of the vector column
+        text_column: Name of the text column
+        metadata_column: Name of the metadata column
+        id_column: Name of the ID column
+        
+    Returns:
+        Tuple of (vectors, texts, metadata, ids)
+    """
+    if not HAS_ARROW:
+        raise ImportError(
+            "The pyarrow package is required for Arrow serialization. "
+            "Install it with 'pip install pyarrow'."
+        )
+    
+    # Extract vectors
+    vectors = arrow_batch_to_vectors(batch, vector_column)
+    
+    # Extract texts if available
+    texts = None
+    if text_column in batch.schema.names:
+        text_array = batch.column(batch.schema.get_field_index(text_column))
+        texts = text_array.to_pylist()
+    
+    # Extract metadata if available
+    metadata = None
+    if metadata_column in batch.schema.names:
+        metadata_array = batch.column(batch.schema.get_field_index(metadata_column))
+        metadata = [json.loads(m) if m else {} for m in metadata_array.to_pylist()]
+    
+    # Extract IDs if available
+    ids = None
+    if id_column in batch.schema.names:
+        id_array = batch.column(batch.schema.get_field_index(id_column))
+        ids = id_array.to_pylist()
+    
+    return vectors, texts, metadata, ids
+
+
+def serialize_arrow_batch(batch: "pa.RecordBatch", compression: bool = False) -> bytes:
+    """
+    Serialize an Arrow RecordBatch to bytes.
+    
+    Args:
+        batch: PyArrow RecordBatch to serialize
+        compression: Whether to use compression
+        
+    Returns:
+        Serialized binary data
+    """
+    if not HAS_ARROW:
+        raise ImportError(
+            "The pyarrow package is required for Arrow serialization. "
+            "Install it with 'pip install pyarrow'."
+        )
+    
+    # Create an IPC output stream
+    sink = pa.BufferOutputStream()
+    
+    if compression:
+        # Use compressed IPC format
+        options = pa.ipc.IpcWriteOptions(compression="zstd")
+        writer = pa.ipc.RecordBatchStreamWriter(sink, batch.schema, options)
+    else:
+        # Use standard IPC format
+        writer = pa.ipc.RecordBatchStreamWriter(sink, batch.schema)
+    
+    # Write the batch
+    writer.write_batch(batch)
+    writer.close()
+    
+    # Get the serialized data
+    return sink.getvalue().to_pybytes()
+
+
+def deserialize_arrow_batch(data: bytes) -> "pa.RecordBatch":
+    """
+    Deserialize binary data to an Arrow RecordBatch.
+    
+    Args:
+        data: Serialized binary data
+        
+    Returns:
+        PyArrow RecordBatch
+    """
+    if not HAS_ARROW:
+        raise ImportError(
+            "The pyarrow package is required for Arrow serialization. "
+            "Install it with 'pip install pyarrow'."
+        )
+    
+    # Create an IPC input stream
+    source = pa.BufferReader(data)
+    reader = pa.ipc.RecordBatchStreamReader(source)
+    
+    # Read the first batch
+    return reader.read_next_batch()

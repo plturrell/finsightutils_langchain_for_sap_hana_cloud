@@ -29,6 +29,9 @@ VERSION_MAJOR = VERSION_PARTS[0] if len(VERSION_PARTS) > 0 else "0"
 VERSION_MINOR = VERSION_PARTS[1] if len(VERSION_PARTS) > 1 else "0"
 VERSION_PATCH = VERSION_PARTS[2] if len(VERSION_PARTS) > 2 else "0"
 
+# Add __version__ variable for importing by __init__.py
+__version__ = VERSION
+
 # Check for environment overrides
 ENV_VERSION = os.environ.get("VERSION")
 if ENV_VERSION:

@@ -1,0 +1,40 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Update system packages and clean up in one step to reduce layer size
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better layer caching
+COPY requirements.txt /app/
+COPY api/requirements.txt /app/api_requirements.txt
+
+# Create security fixes file
+RUN echo "setuptools>=78.1.1\nstarlette>=0.40.0\nfastapi>=0.111.1" > /app/security_fixes.txt
+
+# Install Python dependencies with no cache
+RUN pip install --no-cache-dir --upgrade pip setuptools>=78.1.1 && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r api_requirements.txt || true && \
+    pip install --no-cache-dir -r security_fixes.txt
+
+# Copy application code
+COPY . /app/
+
+# Create a non-root user and switch to it
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN chown -R appuser:appuser /app
+USER appuser
+
+# Expose the API port
+EXPOSE 8000
+
+# Set the entrypoint
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

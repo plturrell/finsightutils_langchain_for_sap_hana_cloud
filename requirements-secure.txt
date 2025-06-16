@@ -1,0 +1,7 @@
+# Secure pinned dependencies with security fixes
+# Fix for CVE-2025-47273 and CVE-2024-6345
+setuptools>=78.1.1
+
+# Fix for CVE-2024-47874
+starlette>=0.40.0
+fastapi>=0.111.1  # Depends on starlette, ensure we get a compatible version

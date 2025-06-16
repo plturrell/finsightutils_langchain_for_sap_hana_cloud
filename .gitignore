@@ -188,3 +188,5 @@ virtualenv/
 *.tfvars
 !*.tfvars.example
 .archive/
+
+**/.claude/settings.local.json

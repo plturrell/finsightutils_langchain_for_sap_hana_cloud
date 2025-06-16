@@ -1,0 +1,15 @@
+version: "1"
+
+builds:
+  - source: "Dockerfile.secure"
+    image: "finsightintelligence/finsight_utils_langchain_hana"
+    tag_with_ref: true
+    tag_with_timestamp: true
+    platforms:
+      - "linux/amd64"
+    build_args:
+      - "FORCE_CPU=1"
+      - "INSTALL_GPU=false"
+    tags:
+      - "cpu-secure"
+      - "cpu-secure-20250613"

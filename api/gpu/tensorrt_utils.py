@@ -16,14 +16,101 @@ try:
     TENSORRT_AVAILABLE = True
 except ImportError:
     TENSORRT_AVAILABLE = False
+    # Create placeholder for TensorRT when not available
+    trt = None
 
-from gpu_utils import get_available_gpu_memory, is_gpu_available
+# Enhanced import strategy that works in all contexts
+import os
+import sys
+from pathlib import Path
+
+# Add project root to sys.path if needed for absolute imports
+project_root = str(Path(__file__).parent.parent.parent.absolute())
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Import gpu_utils with fallback strategy
+try:
+    # Try relative import first (when importing from within the package)
+    from .gpu_utils import get_available_gpu_memory, is_gpu_available
+except ImportError:
+    try:
+        # Fall back to absolute import (when running as a script)
+        from api.gpu.gpu_utils import get_available_gpu_memory, is_gpu_available
+    except ImportError:
+        # Final fallback - if we're in the same directory
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "gpu_utils", os.path.join(os.path.dirname(__file__), "gpu_utils.py")
+        )
+        if spec and spec.loader:
+            gpu_utils = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(gpu_utils)
+            get_available_gpu_memory = gpu_utils.get_available_gpu_memory
+            is_gpu_available = gpu_utils.is_gpu_available
+        else:
+            # Create dummy functions if all imports fail
+            # Define logger at top of file, this reference is safe
+            logging.warning("Could not import gpu_utils. Using dummy implementations.")
+            def get_available_gpu_memory():
+                return {"available": 0, "total": 0}
+            def is_gpu_available():
+                return False
+                
+# Import multi_gpu with fallback strategy
+try:
+    # Try relative import first (when importing from within the package)
+    from .multi_gpu import setup_multi_gpu, distribute_workload
+except ImportError:
+    try:
+        # Fall back to absolute import (when running as a script)
+        from api.gpu.multi_gpu import setup_multi_gpu, distribute_workload
+    except ImportError:
+        # Final fallback - if we're in the same directory
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "multi_gpu", os.path.join(os.path.dirname(__file__), "multi_gpu.py")
+        )
+        if spec and spec.loader:
+            multi_gpu = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(multi_gpu)
+            setup_multi_gpu = multi_gpu.setup_multi_gpu
+            distribute_workload = multi_gpu.distribute_workload
+        else:
+            # Create dummy functions if all imports fail
+            logging.warning("Could not import multi_gpu. Using dummy implementations.")
+            def setup_multi_gpu(enabled=True, device_ids=None, memory_fraction=0.9, force_reinit=False):
+                return False
+            def distribute_workload(items, process_fn, batch_size=None, use_gpu=True, *args, **kwargs):
+                # Process on CPU if GPUs not available
+                if batch_size is None:
+                    # Use a reasonable default batch size for CPU
+                    batch_size = 32
+                    
+                # Split into batches
+                batches = [items[i:i+batch_size] for i in range(0, len(items), batch_size)]
+                
+                # Process batches sequentially
+                results = []
+                for batch in batches:
+                    batch_result = process_fn(batch, *args, **kwargs)
+                    if isinstance(batch_result, list):
+                        results.extend(batch_result)
+                    else:
+                        results.append(batch_result)
+                        
+                return results
 
 logger = logging.getLogger(__name__)
 
 
-class INT8Calibrator(trt.IInt8EntropyCalibrator2):
-    """
+# Declare for type hinting
+tensorrt_optimizer = None
+
+# Only define TensorRT-dependent classes if TensorRT is available
+if TENSORRT_AVAILABLE:
+    class INT8Calibrator(trt.IInt8EntropyCalibrator2):
+        """
     INT8 calibrator for TensorRT quantization.
     
     This class implements the TensorRT IInt8EntropyCalibrator2 interface
@@ -120,8 +207,9 @@ class INT8Calibrator(trt.IInt8EntropyCalibrator2):
             f.write(cache)
 
 
-class INT8CalibrationDataset:
-    """
+if TENSORRT_AVAILABLE:
+    class INT8CalibrationDataset:
+        """
     Dataset for INT8 calibration.
     
     This class provides calibration data for INT8 quantization in TensorRT.
@@ -257,8 +345,9 @@ class INT8CalibrationDataset:
             "Autonomous vehicles use sensors and AI to navigate without human input.",
         ]
 
-class TensorRTOptimizer:
-    """
+if TENSORRT_AVAILABLE:
+    class TensorRTOptimizer:
+        """
     Handles TensorRT optimization for embedding models.
     """
     def __init__(
@@ -938,33 +1027,131 @@ class TensorRTOptimizer:
                     results["int8_speedup_over_fp16"] = int8_throughput / fp16_throughput
         
         return results
-
-
-# Global optimizer instance
-def _create_optimized_tensorrt_instance():
-    """Create global TensorRT optimizer instance with optimal settings."""
-    # Create a temporary instance to detect optimal precision
-    temp_optimizer = TensorRTOptimizer(
-        cache_dir=os.environ.get("TENSORRT_CACHE_DIR", "/tmp/tensorrt_engines"),
-        enable_caching=os.environ.get("TENSORRT_CACHE", "1") == "1",
-    )
     
-    # Determine optimal precision based on hardware capabilities
-    # Allow override via environment variable
-    if "TENSORRT_PRECISION" in os.environ:
-        precision = os.environ.get("TENSORRT_PRECISION")
-        logger.info(f"Using environment-specified precision: {precision}")
-    else:
-        precision = temp_optimizer.get_optimal_precision()
-        logger.info(f"Auto-detected optimal precision: {precision}")
+    # Global optimizer instance
+    def _create_optimized_tensorrt_instance():
+        """Create global TensorRT optimizer instance with optimal settings."""
+        if not TENSORRT_AVAILABLE:
+            logger.warning("TensorRT not available, cannot create optimizer instance")
+            return None
+            
+        # Determine cache directory
+        cache_dir = os.environ.get("TENSORRT_CACHE_DIR", "/tmp/tensorrt_engines")
+        calibration_cache_dir = os.environ.get(
+            "TENSORRT_CALIBRATION_CACHE_DIR", "/tmp/tensorrt_calibration"
+        )
+        
+        # Check if caching is enabled
+        enable_caching = os.environ.get("TENSORRT_ENABLE_CACHING", "1").lower() in ["1", "true", "yes"]
+        
+        # Determine precision
+        precision = os.environ.get("TENSORRT_PRECISION", "auto").lower()
+        
+        # Create optimizer instance
+        optimizer = TensorRTOptimizer(
+            cache_dir=cache_dir,
+            precision=precision,
+            enable_caching=enable_caching,
+            calibration_cache_dir=calibration_cache_dir,
+        )
+        
+        return optimizer
     
-    # Create the actual optimizer instance with detected settings
-    return TensorRTOptimizer(
+# Define the DummyOptimizer at the module level
+class DummyOptimizer:
+    def __init__(self):
+        self.precision = "none"
+        
+    def optimize_model(self, *args, **kwargs):
+        logger.warning("TensorRT not available. Using original model.")
+        return args[0] if args else None
+        
+    def benchmark_inference(self, *args, **kwargs):
+        return {"error": "TensorRT not available"}
+        
+    def benchmark_precision_comparison(self, *args, **kwargs):
+        return {"error": "TensorRT not available"}
+
+# Add create_tensorrt_engine function for backward compatibility
+def create_tensorrt_engine(model, model_name, input_shape=None, max_batch_size=128, 
+                       dynamic_shapes=True, precision=None, calibration_data=None, force_rebuild=False):
+    """
+    Create a TensorRT engine from a PyTorch model.
+    
+    This is a wrapper function for the TensorRTOptimizer.optimize_model method to provide
+    backward compatibility with existing code.
+    
+    Args:
+        model: PyTorch model to optimize
+        model_name: Name of the model (used for caching)
+        input_shape: Input shape for compilation (default depends on model)
+        max_batch_size: Maximum batch size for the engine
+        dynamic_shapes: Whether to use dynamic shapes for inputs
+        precision: Precision to use (fp32, fp16, int8) - if None, uses optimizer default
+        calibration_data: Text samples for INT8 calibration (if using INT8)
+        force_rebuild: Force rebuilding the engine even if a cached version exists
+        
+    Returns:
+        Optimized TensorRT model or original model if optimization fails
+    """
+    if input_shape is None:
+        input_shape = [1, 512]  # Default input shape
+    
+    # Use the global optimizer with custom precision if provided
+    global tensorrt_optimizer
+    old_precision = None
+    
+    if precision is not None and TENSORRT_AVAILABLE:
+        old_precision = tensorrt_optimizer.precision
+        tensorrt_optimizer.precision = precision
+    
+    try:
+        result = tensorrt_optimizer.optimize_model(
+            model=model,
+            model_name=model_name,
+            input_shape=input_shape,
+            max_batch_size=max_batch_size,
+            dynamic_shapes=dynamic_shapes,
+            calibration_data=calibration_data,
+            force_rebuild=force_rebuild
+        )
+    finally:
+        # Restore original precision setting
+        if old_precision is not None and TENSORRT_AVAILABLE:
+            tensorrt_optimizer.precision = old_precision
+    
+    return result
+
+# Add optimize_with_tensorrt as an alias for create_tensorrt_engine for backward compatibility
+def optimize_with_tensorrt(model, model_name, input_shape=None, max_batch_size=128,
+                         dynamic_shapes=True, precision=None, calibration_data=None, force_rebuild=False):
+    """
+    Alias for create_tensorrt_engine function.
+    
+    This function exists solely for backward compatibility with code that imports optimize_with_tensorrt.
+    It calls create_tensorrt_engine with the same parameters.
+    
+    Args:
+        Same as create_tensorrt_engine
+        
+    Returns:
+        Same as create_tensorrt_engine
+    """
+    return create_tensorrt_engine(
+        model=model,
+        model_name=model_name,
+        input_shape=input_shape,
+        max_batch_size=max_batch_size,
+        dynamic_shapes=dynamic_shapes,
         precision=precision,
-        cache_dir=os.environ.get("TENSORRT_CACHE_DIR", "/tmp/tensorrt_engines"),
-        calibration_cache_dir=os.environ.get("TENSORRT_CALIBRATION_DIR", "/tmp/tensorrt_calibration"),
-        enable_caching=os.environ.get("TENSORRT_CACHE", "1") == "1",
+        calibration_data=calibration_data,
+        force_rebuild=force_rebuild
     )
 
-# Create the global optimizer instance
-tensorrt_optimizer = _create_optimized_tensorrt_instance()
+# Create the global optimizer instance based on TensorRT availability
+if TENSORRT_AVAILABLE:
+    tensorrt_optimizer = _create_optimized_tensorrt_instance()
+else:
+    tensorrt_optimizer = DummyOptimizer()
+
+# Make sure tensorrt_optimizer is defined as a module-level variable

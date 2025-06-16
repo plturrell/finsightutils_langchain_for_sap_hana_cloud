@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Card,
@@ -22,6 +22,7 @@ import {
   useTheme,
   IconButton,
   Tooltip,
+  Container,
 } from '@mui/material';
 import {
   Speed as SpeedIcon,
@@ -45,7 +46,16 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { useSpring, useTrail, useChain, animated, useSpringRef } from 'react-spring';
 import { benchmarkService, BenchmarkRequest, BenchmarkResult, GPUInfo } from '../api/services';
+
+// Animated components
+const AnimatedBox = animated(Box);
+const AnimatedCard = animated(Card);
+const AnimatedPaper = animated(Paper);
+const AnimatedTypography = animated(Typography);
+const AnimatedGrid = animated(Grid);
+const AnimatedContainer = animated(Container);
 
 // Additional types
 // Using types from api/services.ts
@@ -67,7 +77,53 @@ const Benchmark: React.FC = () => {
   const [results, setResults] = useState<BenchmarkResult | null>(null);
   const [gpuInfo, setGpuInfo] = useState<GPUInfo | null>(null);
   const [benchmarkStatus, setBenchmarkStatus] = useState({ is_running: false, current_benchmark: null });
-
+  const [animationsVisible, setAnimationsVisible] = useState<boolean>(false);
+  
+  // Animation spring refs for sequence chaining
+  const headerSpringRef = useSpringRef();
+  const gpuCardSpringRef = useSpringRef();
+  const configCardSpringRef = useSpringRef();
+  const resultsSpringRef = useSpringRef();
+  
+  // Animation springs
+  const headerAnimation = useSpring({
+    ref: headerSpringRef,
+    from: { opacity: 0, transform: 'translateY(-20px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(-20px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  const gpuCardAnimation = useSpring({
+    ref: gpuCardSpringRef,
+    from: { opacity: 0, transform: 'translateY(30px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(30px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  const configCardAnimation = useSpring({
+    ref: configCardSpringRef,
+    from: { opacity: 0, transform: 'translateY(30px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(30px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  const resultsAnimation = useSpring({
+    ref: resultsSpringRef,
+    from: { opacity: 0, transform: 'translateY(40px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(40px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  // Chain animations sequence
+  useChain(
+    animationsVisible 
+      ? [headerSpringRef, gpuCardSpringRef, configCardSpringRef, resultsSpringRef] 
+      : [resultsSpringRef, configCardSpringRef, gpuCardSpringRef, headerSpringRef],
+    animationsVisible 
+      ? [0, 0.1, 0.2, 0.3] 
+      : [0, 0.1, 0.2, 0.3]
+  );
+  
   // Embedding benchmark state
   const [embeddingText, setEmbeddingText] = useState(
     'This is a sample text for benchmarking embedding performance.'
@@ -101,6 +157,14 @@ const Benchmark: React.FC = () => {
     
     return () => clearInterval(interval);
   }, [benchmarkStatus.is_running]);
+  
+  // Trigger animations on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAnimationsVisible(true);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const fetchGPUInfo = async () => {
     try {
@@ -218,32 +282,108 @@ const Benchmark: React.FC = () => {
   };
 
   return (
-    <Box className="fade-in">
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" fontWeight="500">
+    <AnimatedBox>
+      <AnimatedBox sx={{ mb: 3 }} style={headerAnimation}>
+        <AnimatedTypography 
+          variant="h4" 
+          fontWeight="600"
+          sx={{
+            background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            textFillColor: 'transparent',
+            letterSpacing: '0.02em',
+          }}
+        >
           Performance Benchmarks
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
+        </AnimatedTypography>
+        <AnimatedTypography 
+          variant="body1" 
+          color="text.secondary"
+          sx={{
+            maxWidth: '800px',
+            lineHeight: 1.6,
+          }}
+        >
           Measure the performance of vector operations with GPU acceleration
-        </Typography>
-      </Box>
+        </AnimatedTypography>
+      </AnimatedBox>
 
       {renderGPUWarning()}
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
+        <animated.div style={headerAnimation}>
+          <Alert 
+            severity="error" 
+            sx={{ 
+              mb: 3,
+              borderRadius: '8px',
+              position: 'relative',
+              overflow: 'hidden',
+              '&::after': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '4px',
+                background: 'linear-gradient(90deg, #f44336, #ff9800)',
+                animation: 'shimmer 2s infinite linear',
+              },
+              '@keyframes shimmer': {
+                '0%': {
+                  backgroundPosition: '-100% 0',
+                },
+                '100%': {
+                  backgroundPosition: '100% 0',
+                },
+              },
+            }}
+          >
+            {error}
+          </Alert>
+        </animated.div>
       )}
 
-      <Grid container spacing={3}>
+      <AnimatedGrid container spacing={3}>
         {/* GPU Info Card */}
-        <Grid item xs={12} md={4}>
-          <Card sx={{ height: '100%' }}>
+        <AnimatedGrid item xs={12} md={4} style={gpuCardAnimation}>
+          <AnimatedCard 
+            sx={{ 
+              height: '100%',
+              borderRadius: '12px',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.05)',
+              transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+              '&:hover': {
+                transform: 'translateY(-4px)',
+                boxShadow: '0 12px 28px rgba(0,0,0,0.1), 0 8px 10px rgba(0,0,0,0.08)',
+              }
+            }}
+          >
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <MemoryIcon color="primary" sx={{ fontSize: 32, mr: 1.5 }} />
-                <Typography variant="h6">GPU Information</Typography>
+                <MemoryIcon 
+                  color="primary" 
+                  sx={{ 
+                    fontSize: 32, 
+                    mr: 1.5,
+                    filter: 'drop-shadow(0 0 4px rgba(25, 118, 210, 0.4))'
+                  }} 
+                />
+                <AnimatedTypography 
+                  variant="h6"
+                  sx={{
+                    fontWeight: 600,
+                    background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    textFillColor: 'transparent',
+                  }}
+                >
+                  GPU Information
+                </AnimatedTypography>
               </Box>
               <Divider sx={{ mb: 2 }} />
               
@@ -326,15 +466,45 @@ const Benchmark: React.FC = () => {
               )}
             </CardContent>
           </Card>
-        </Grid>
+        </AnimatedGrid>
 
         {/* Benchmark Configuration Card */}
-        <Grid item xs={12} md={8}>
-          <Card sx={{ mb: 3 }}>
+        <AnimatedGrid item xs={12} md={8} style={configCardAnimation}>
+          <AnimatedCard 
+            sx={{ 
+              mb: 3,
+              borderRadius: '12px',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.05)',
+              transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+              '&:hover': {
+                transform: 'translateY(-4px)',
+                boxShadow: '0 12px 28px rgba(0,0,0,0.1), 0 8px 10px rgba(0,0,0,0.08)',
+              }
+            }}
+          >
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <SpeedIcon color="primary" sx={{ fontSize: 32, mr: 1.5 }} />
-                <Typography variant="h6">Benchmark Configuration</Typography>
+                <SpeedIcon 
+                  color="primary" 
+                  sx={{ 
+                    fontSize: 32, 
+                    mr: 1.5,
+                    filter: 'drop-shadow(0 0 4px rgba(25, 118, 210, 0.4))'
+                  }} 
+                />
+                <AnimatedTypography 
+                  variant="h6"
+                  sx={{
+                    fontWeight: 600,
+                    background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    textFillColor: 'transparent',
+                  }}
+                >
+                  Benchmark Configuration
+                </AnimatedTypography>
               </Box>
               <Divider sx={{ mb: 2 }} />
               
@@ -405,7 +575,36 @@ const Benchmark: React.FC = () => {
                       startIcon={benchmarkStatus.is_running ? <StopIcon /> : <PlayIcon />}
                       onClick={runEmbeddingBenchmark}
                       disabled={loading || benchmarkStatus.is_running || !gpuInfo?.gpu_available}
-                      sx={{ minWidth: 180 }}
+                      sx={{ 
+                        minWidth: 180,
+                        position: 'relative',
+                        overflow: 'hidden',
+                        transition: 'all 0.3s ease',
+                        background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+                        boxShadow: '0 4px 12px rgba(25, 118, 210, 0.2)',
+                        '&:hover': {
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 6px 16px rgba(25, 118, 210, 0.3)',
+                        },
+                        '&:after': {
+                          content: '""',
+                          position: 'absolute',
+                          width: '100%',
+                          height: '100%',
+                          top: 0,
+                          left: 0,
+                          pointerEvents: 'none',
+                          background: 'radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 60%)',
+                          transform: 'scale(0, 0)',
+                          opacity: 0,
+                          transition: 'transform 0.4s, opacity 0.3s',
+                        },
+                        '&:active:after': {
+                          transform: 'scale(2, 2)',
+                          opacity: 0,
+                          transition: '0s',
+                        }
+                      }}
                     >
                       {benchmarkStatus.is_running && benchmarkStatus.current_benchmark === 'embedding'
                         ? 'Running...'
@@ -582,28 +781,77 @@ const Benchmark: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-      </Grid>
+      </AnimatedGrid>
 
       {/* Results Section */}
       {(results || benchmarkStatus.is_running) && (
-        <Box sx={{ mt: 3 }}>
-          <Card>
+        <AnimatedBox sx={{ mt: 3 }} style={resultsAnimation}>
+          <AnimatedCard
+            sx={{ 
+              borderRadius: '12px',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.05)',
+              transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+              '&:hover': {
+                boxShadow: '0 12px 28px rgba(0,0,0,0.1), 0 8px 10px rgba(0,0,0,0.08)',
+              }
+            }}
+          >
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <SpeedIcon color="primary" sx={{ fontSize: 32, mr: 1.5 }} />
-                  <Typography variant="h6">
+                  <SpeedIcon 
+                    color="primary" 
+                    sx={{ 
+                      fontSize: 32, 
+                      mr: 1.5,
+                      filter: 'drop-shadow(0 0 4px rgba(25, 118, 210, 0.4))',
+                      animation: benchmarkStatus.is_running ? 'pulse 1.5s infinite' : 'none',
+                      '@keyframes pulse': {
+                        '0%': { filter: 'drop-shadow(0 0 2px rgba(25, 118, 210, 0.4))' },
+                        '50%': { filter: 'drop-shadow(0 0 8px rgba(25, 118, 210, 0.8))' },
+                        '100%': { filter: 'drop-shadow(0 0 2px rgba(25, 118, 210, 0.4))' },
+                      }
+                    }} 
+                  />
+                  <AnimatedTypography 
+                    variant="h6"
+                    sx={{
+                      fontWeight: 600,
+                      background: benchmarkStatus.is_running 
+                        ? `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main}, ${theme.palette.primary.main})` 
+                        : `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                      backgroundSize: benchmarkStatus.is_running ? '200% 100%' : '100% 100%',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                      textFillColor: 'transparent',
+                      animation: benchmarkStatus.is_running ? 'moving-gradient 2s linear infinite' : 'none',
+                      '@keyframes moving-gradient': {
+                        '0%': { backgroundPosition: '0% 0%' },
+                        '100%': { backgroundPosition: '200% 0%' },
+                      }
+                    }}
+                  >
                     Benchmark Results
                     {benchmarkStatus.is_running && (
                       <Chip
                         label="Running"
                         color="primary"
                         size="small"
-                        sx={{ ml: 2 }}
+                        sx={{ 
+                          ml: 2,
+                          background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                          animation: 'pulse-bg 2s infinite ease-in-out',
+                          '@keyframes pulse-bg': {
+                            '0%': { opacity: 0.8 },
+                            '50%': { opacity: 1 },
+                            '100%': { opacity: 0.8 },
+                          }
+                        }}
                         icon={<CircularProgress size={12} color="inherit" />}
                       />
                     )}
-                  </Typography>
+                  </AnimatedTypography>
                 </Box>
                 <Box>
                   <Tooltip title="Save results">
@@ -974,10 +1222,10 @@ const Benchmark: React.FC = () => {
                 </Box>
               )}
             </CardContent>
-          </Card>
-        </Box>
+          </AnimatedCard>
+        </AnimatedBox>
       )}
-    </Box>
+    </AnimatedBox>
   );
 };
 

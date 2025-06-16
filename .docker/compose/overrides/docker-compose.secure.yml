@@ -1,0 +1,95 @@
+version: '3.8'
+
+# Security-enhanced overrides for LangChain SAP HANA Integration Docker Compose
+# This configuration extends the base docker-compose.yml with security enhancements
+
+services:
+  # API Service security overrides
+  api:
+    build:
+      dockerfile: .docker/services/api/Dockerfile.secure
+    environment:
+      # Enhanced security settings
+      - AUTH_REQUIRED=true
+      - ENFORCE_HTTPS=true
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_REQUESTS=100
+      - RATE_LIMIT_TIMEFRAME=60
+      - JWT_EXPIRATION=3600
+      - SESSION_TIMEOUT=1800
+      - CONTENT_SECURITY_POLICY="default-src 'self'; script-src 'self'; connect-src 'self' https://api.openai.com; img-src 'self' data:; style-src 'self' 'unsafe-inline';"
+      - X_CONTENT_TYPE_OPTIONS=nosniff
+      - X_FRAME_OPTIONS=DENY
+      - STRICT_TRANSPORT_SECURITY="max-age=31536000; includeSubDomains"
+      - PERMITTED_CROSS_DOMAIN_POLICIES=none
+      - REFERRER_POLICY=no-referrer
+      - LOG_LEVEL=INFO
+      - LOG_SENSITIVE_DATA=false
+      - AUDIT_LOGGING=true
+    restart: unless-stopped
+    profiles: ["secure", "production"]
+
+  # Arrow Flight Service security overrides
+  arrow-flight:
+    build:
+      dockerfile: .docker/services/arrow-flight/Dockerfile.secure
+    environment:
+      # Enhanced security settings
+      - AUTH_REQUIRED=true
+      - ENFORCE_HTTPS=true
+      - FLIGHT_TLS_ENABLED=true
+      - FLIGHT_TLS_CERT=/app/certs/server.crt
+      - FLIGHT_TLS_KEY=/app/certs/server.key
+      - LOG_LEVEL=INFO
+      - LOG_SENSITIVE_DATA=false
+      - AUDIT_LOGGING=true
+    volumes:
+      - ../../certs:/app/certs:ro
+    restart: unless-stopped
+    profiles: ["secure", "production"]
+
+  # Frontend Service security overrides
+  frontend:
+    build:
+      dockerfile: .docker/services/frontend/Dockerfile.secure
+    environment:
+      # Enhanced security settings
+      - ENABLE_CSP=true
+      - ENABLE_HSTS=true
+    volumes:
+      - ../../certs:/etc/nginx/certs:ro
+    restart: unless-stopped
+    profiles: ["secure", "production"]
+
+  # TLS Proxy for HTTPS termination
+  tls-proxy:
+    image: nginx:alpine
+    container_name: langchain-hana-tls-proxy
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ../../certs:/etc/nginx/certs:ro
+      - ../.docker/config/nginx/secure.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+      - frontend
+    restart: unless-stopped
+    networks:
+      - langchain-hana-network
+    profiles: ["secure", "production"]
+
+  # Security scanning (optional, for CI/CD pipeline)
+  security-scanner:
+    image: owasp/zap2docker-stable:latest
+    container_name: langchain-hana-security-scanner
+    command: ["zap-baseline.py", "-t", "https://api:8000", "-g", "gen.conf", "-r", "security-report.html"]
+    volumes:
+      - security-reports:/zap/wrk/
+    networks:
+      - langchain-hana-network
+    profiles: ["security-scan"]
+
+volumes:
+  security-reports:
+    driver: local

@@ -1,0 +1,90 @@
+# Build frontend stage
+FROM node:18-alpine AS frontend-build
+
+WORKDIR /app/frontend
+
+# Copy frontend files
+COPY frontend/package.json .
+COPY frontend/package-lock.json* .
+RUN npm ci
+
+# Copy frontend files
+COPY frontend/ .
+
+# Debug: List contents of src directory
+RUN ls -la src/
+
+# Try to fix the build
+RUN npm run build || (echo "Retrying build with workaround..." && \
+    # Make sure App.tsx is properly cased and accessible
+    touch src/App.tsx && \
+    npm run build)
+
+# Main build stage
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    nginx \
+    && rm -rf /var/lib/apt/lists/*
+
+# Setup nginx for frontend
+COPY --from=frontend-build /app/frontend/build /usr/share/nginx/html
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy requirements
+COPY api/requirements.txt .
+COPY requirements.txt ./full_requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir langchain langchain_core
+
+# Copy API code and Arrow Flight components
+COPY api/ ./api/
+COPY langchain_hana/ ./langchain_hana/
+
+# Create required directories
+RUN mkdir -p /app/cache
+
+# Setup entrypoint script
+COPY frontend/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Expose both API and frontend ports
+EXPOSE 8000 8815 3000
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+ENV TEST_MODE=true
+ENV ENABLE_CORS=true
+ENV LOG_LEVEL=INFO
+ENV FLIGHT_AUTO_START=true
+ENV FLIGHT_HOST=0.0.0.0
+ENV FLIGHT_PORT=8815
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Start script to run both services
+RUN echo '#!/bin/bash\n\
+# Start API in background\n\
+python -m uvicorn api.app:app --host 0.0.0.0 --port 8000 &\n\
+\n\
+# Configure frontend with runtime environment variables\n\
+/entrypoint.sh\n\
+\n\
+# Start nginx in foreground\n\
+nginx -g "daemon off;"\n\
+' > /start.sh
+
+RUN chmod +x /start.sh
+
+# Command to run
+CMD ["/start.sh"]

@@ -1,0 +1,115 @@
+version: '3.8'
+
+# Development overrides for LangChain SAP HANA Integration Docker Compose
+# This configuration extends the base docker-compose.yml with development-specific settings
+
+services:
+  # API Service overrides for development
+  api:
+    volumes:
+      # Mount source code for live development
+      - ../../api:/app/api
+      - ../../langchain_hana:/app/langchain_hana
+      - ../../tests:/app/tests
+    environment:
+      # Development-specific settings
+      - LOG_LEVEL=DEBUG
+      - TEST_MODE=true
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+      - AUTH_REQUIRED=false
+      - RELOAD=true
+    command: ["uvicorn", "api.core.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    profiles: ["dev", "api-dev"]
+
+  # Arrow Flight Service overrides for development
+  arrow-flight:
+    volumes:
+      # Mount source code for live development
+      - ../../api:/app/api
+      - ../../langchain_hana:/app/langchain_hana
+    environment:
+      # Development-specific settings
+      - LOG_LEVEL=DEBUG
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+      - RELOAD=true
+    command: ["uvicorn", "api.core.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    profiles: ["dev", "arrow-flight-dev"]
+
+  # Frontend Service overrides for development
+  frontend:
+    volumes:
+      # Mount source code for live development
+      - ../../frontend:/app
+    environment:
+      # Development-specific settings
+      - NODE_ENV=development
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_DEBUG=true
+    command: ["npm", "start"]
+    profiles: ["dev", "frontend-dev"]
+
+  # Additional development tools
+  # Jupyter notebook for development and testing
+  jupyter:
+    image: ${DOCKER_REGISTRY:-ghcr.io}/${ORGANIZATION:-finsightdev}/langchain-hana-jupyter:${VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: .docker/services/dev/jupyter.Dockerfile
+    container_name: langchain-hana-jupyter
+    volumes:
+      - ../../:/workspace
+      - jupyter-data:/home/jovyan/work
+    ports:
+      - "${JUPYTER_PORT:-8888}:8888"
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:-password}
+      - HANA_HOST=${HANA_HOST:-}
+      - HANA_PORT=${HANA_PORT:-443}
+      - HANA_USER=${HANA_USER:-}
+      - HANA_PASSWORD=${HANA_PASSWORD:-}
+    networks:
+      - langchain-hana-network
+    profiles: ["dev", "notebook"]
+
+  # Mock HANA service for testing
+  mock-hana:
+    image: finsightdev/mock-hana:latest
+    container_name: langchain-mock-hana
+    ports:
+      - "30015:30015"
+    environment:
+      - MOCK_DATA_DIR=/data
+    volumes:
+      - ../../tests/mock_data:/data
+    networks:
+      - langchain-hana-network
+    profiles: ["dev", "testing"]
+
+  # Redis for caching in development
+  redis:
+    image: redis:${REDIS_VERSION:-7.0-alpine}
+    container_name: langchain-hana-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - langchain-hana-network
+    profiles: ["dev", "cache"]
+
+volumes:
+  jupyter-data:
+    driver: local
+  redis-data:
+    driver: local

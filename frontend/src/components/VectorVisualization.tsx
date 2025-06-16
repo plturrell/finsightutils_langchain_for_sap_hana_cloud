@@ -146,14 +146,22 @@ const VectorVisualization: React.FC<VisualizationProps> = ({
   
   // Initialize 3D visualization when points change
   useEffect(() => {
-    if (visualizationMode === '3d' && points.length > 0) {
-      initThreeJS();
-      return () => {
+    if (visualizationMode === '3d') {
+      if (points.length > 0) {
+        initThreeJS();
+        return () => {
+          if (rendererRef.current && containerRef.current) {
+            containerRef.current.removeChild(rendererRef.current.domElement);
+          }
+          disposeThreeJS();
+        };
+      } else {
+        // Clean up any existing 3D scene when there are no points
         if (rendererRef.current && containerRef.current) {
           containerRef.current.removeChild(rendererRef.current.domElement);
         }
         disposeThreeJS();
-      };
+      }
     }
   }, [points, visualizationMode]);
   
@@ -164,6 +172,13 @@ const VectorVisualization: React.FC<VisualizationProps> = ({
       updatePointSizes();
     }
   }, [colorBy, sizeBy, visualizationMode, points]);
+  
+  // Show friendly message when no data
+  useEffect(() => {
+    if (points.length === 0 && !loading && !error) {
+      setError('No vector data available. Please select a different table or adjust your filter criteria.');
+    }
+  }, [points, loading]);
   
   // Set auto-rotation
   useEffect(() => {
@@ -199,47 +214,70 @@ const VectorVisualization: React.FC<VisualizationProps> = ({
         dimensionalityReduction
       };
       
+      console.log('Fetching vectors with request:', request);
+      
       const response = await developerService.getVectors(request);
       const data = response.data;
       
-      // Update pagination information
-      setTotalCount(data.total_count);
-      setTotalPages(data.total_pages);
+      console.log('Vector data received:', data);
       
-      // Transform the data
+      if (!data.vectors || data.vectors.length === 0) {
+        setError('No vector data found for the selected criteria.');
+        setPoints([]);
+        return;
+      }
+      
+      // Update pagination information
+      setTotalCount(data.total_count || 0);
+      setTotalPages(data.total_pages || 1);
+      
+      // Transform the data, handling potential missing or malformed data
       const reducedPoints: ReducedPoint[] = data.vectors.map((point: any, index: number) => {
+        // Ensure we have reduced_vector data or generate placeholder
+        const reduced_vector = point.reduced_vector && point.reduced_vector.length >= 2 
+          ? point.reduced_vector 
+          : [Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1];
+        
+        // Ensure metadata exists
+        const metadata = point.metadata || {};
+        
         // Determine color based on metadata or cluster
         let pointColor = '';
-        if (colorBy === 'cluster' && point.metadata.cluster !== undefined) {
+        if (colorBy === 'cluster' && metadata.cluster !== undefined) {
           // Use cluster-based coloring
           const clusterColors = [
             '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
           ];
-          pointColor = clusterColors[point.metadata.cluster % clusterColors.length];
-        } else if (colorBy !== 'none' && colorBy in point.metadata) {
+          pointColor = clusterColors[metadata.cluster % clusterColors.length];
+        } else if (colorBy !== 'none' && colorBy in metadata) {
           // Use metadata-based coloring
-          pointColor = getColorForCategory(String(point.metadata[colorBy]));
+          pointColor = getColorForCategory(String(metadata[colorBy]));
         } else {
-          // Default color
-          pointColor = '#1f77b4';
+          // Default color - create a stable but random color based on index
+          const colorIndex = index % 10;
+          const clusterColors = [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+          ];
+          pointColor = clusterColors[colorIndex];
         }
         
         // Determine size based on metadata
         let pointSize = 5;
-        if (sizeBy !== 'none' && sizeBy in point.metadata && typeof point.metadata[sizeBy] === 'number') {
+        if (sizeBy !== 'none' && sizeBy in metadata && typeof metadata[sizeBy] === 'number') {
           // Scale size between 3 and 10
-          const value = point.metadata[sizeBy];
+          const value = metadata[sizeBy];
           pointSize = 3 + (value * 7);
         }
         
         return {
           id: point.id || `point-${index}`,
-          x: point.reduced_vector[0],
-          y: point.reduced_vector[1],
-          z: point.reduced_vector[2] || 0,
-          metadata: point.metadata || {},
-          content: point.content || '',
+          x: reduced_vector[0],
+          y: reduced_vector[1],
+          z: reduced_vector.length > 2 ? reduced_vector[2] : 0,
+          metadata: metadata,
+          content: point.content || `Vector ${index}`,
           color: pointColor,
           size: pointSize,
         };
@@ -249,28 +287,37 @@ const VectorVisualization: React.FC<VisualizationProps> = ({
       
       // Extract available metadata fields and values
       if (data.vectors.length > 0) {
-        // Get unique metadata fields
-        const fields = Object.keys(data.vectors[0].metadata).filter(
-          key => typeof data.vectors[0].metadata[key] !== 'object'
-        );
-        setMetadataFields(fields);
+        // Find a vector with metadata for field extraction
+        const vectorWithMetadata = data.vectors.find(v => v.metadata && Object.keys(v.metadata).length > 0);
         
-        // Extract available filter values
-        const filters: Record<string, any[]> = {};
-        fields.forEach(field => {
-          const values = new Set<any>();
-          data.vectors.forEach(point => {
-            if (point.metadata[field] !== undefined) {
-              values.add(point.metadata[field]);
-            }
+        if (vectorWithMetadata && vectorWithMetadata.metadata) {
+          // Get unique metadata fields
+          const fields = Object.keys(vectorWithMetadata.metadata).filter(
+            key => typeof vectorWithMetadata.metadata[key] !== 'object'
+          );
+          setMetadataFields(fields);
+          
+          // Extract available filter values
+          const filters: Record<string, any[]> = {};
+          fields.forEach(field => {
+            const values = new Set<any>();
+            data.vectors.forEach(point => {
+              if (point.metadata && point.metadata[field] !== undefined) {
+                values.add(point.metadata[field]);
+              }
+            });
+            filters[field] = Array.from(values);
           });
-          filters[field] = Array.from(values);
-        });
-        setAvailableFilters(filters);
+          setAvailableFilters(filters);
+        }
+      } else {
+        setMetadataFields([]);
+        setAvailableFilters({});
       }
     } catch (err) {
       console.error('Error fetching vector data:', err);
-      setError('Failed to fetch vector data. Please try again.');
+      setError(`Failed to fetch vector data: ${err.message || 'Unknown error'}`);
+      setPoints([]);
     } finally {
       setLoading(false);
     }
@@ -573,7 +620,33 @@ const VectorVisualization: React.FC<VisualizationProps> = ({
   
   // Render 2D plot
   const render2DPlot = () => {
-    if (points.length === 0) return null;
+    if (points.length === 0) {
+      return (
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            height: '300px', 
+            border: '1px dashed #ccc', 
+            borderRadius: 2,
+            p: 3
+          }}
+        >
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+            No data available to visualize
+          </Typography>
+          <Button 
+            variant="outlined" 
+            onClick={fetchVectorData}
+            startIcon={<RefreshIcon />}
+          >
+            Refresh Data
+          </Button>
+        </Box>
+      );
+    }
     
     // Group points by category for 2D plot
     const categories: Record<string, { x: number[], y: number[], text: string[], name: string }> = {};

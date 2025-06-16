@@ -16,7 +16,8 @@ from typing import Dict, List, Optional, Union, Any, Tuple, Callable
 import numpy as np
 from langchain_core.embeddings import Embeddings
 
-from langchain_hana.embeddings import HanaInternalEmbeddings
+# Avoid circular import by removing top-level import
+# from langchain_hana.embeddings import HanaInternalEmbeddings
 from langchain_hana.gpu.tensorrt_embeddings import TensorRTEmbeddings
 from langchain_hana.gpu.batch_processor import EmbeddingBatchProcessor
 from langchain_hana.gpu.calibration_datasets import create_enhanced_calibration_dataset
@@ -171,6 +172,8 @@ class HanaTensorRTEmbeddings(Embeddings):
         if self.use_internal_embeddings:
             # Use SAP HANA's internal embedding function
             logger.info(f"Using SAP HANA internal embeddings with model ID: {self.internal_embedding_model_id}")
+            # Use delayed import to break circular dependency
+            from langchain_hana.embeddings import HanaInternalEmbeddings
             self.embedding_model = HanaInternalEmbeddings(
                 internal_embedding_model_id=self.internal_embedding_model_id
             )

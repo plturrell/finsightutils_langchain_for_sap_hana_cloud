@@ -1,0 +1,4 @@
+Content for an image file is not plain text and can't be directly created this way. If you need a sample image, you need to either:
+1. Generate it from the visualization module you created
+2. Use a different tool to create or download an image
+3. Create a placeholder or description file instead

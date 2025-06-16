@@ -1,0 +1,65 @@
+groups:
+  - name: api_alerts
+    rules:
+      - alert: APIHighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on {{ $labels.instance }}"
+          description: "Error rate is above 5% for 2 minutes on {{ $labels.instance }}."
+
+      - alert: APIHighLatency
+        expr: avg(api_request_duration_seconds) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency ({{ $labels.instance }})"
+          description: "Average API latency is above 2 seconds for 5 minutes on {{ $labels.instance }}."
+
+      - alert: APIInstanceDown
+        expr: up{job="langchain-hana-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API instance down ({{ $labels.instance }})"
+          description: "API instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: ArrowFlightInstanceDown
+        expr: up{job="langchain-hana-arrow-flight"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Arrow Flight instance down ({{ $labels.instance }})"
+          description: "Arrow Flight instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 / 1024 > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage ({{ $labels.instance }})"
+          description: "Memory usage is above 2GB for 5 minutes on {{ $labels.instance }}."
+
+      - alert: HighCPUUsage
+        expr: process_cpu_seconds_total / 60 > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage ({{ $labels.instance }})"
+          description: "CPU usage is above 80% for 5 minutes on {{ $labels.instance }}."
+
+      - alert: TooManyRequests
+        expr: rate(http_requests_total[1m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Too many requests ({{ $labels.instance }})"
+          description: "More than 100 requests per minute for 2 minutes on {{ $labels.instance }}."

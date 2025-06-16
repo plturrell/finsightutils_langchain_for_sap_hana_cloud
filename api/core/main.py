@@ -73,7 +73,20 @@ logger = logging.getLogger(__name__)
 # Environment configuration
 IS_VERCEL = os.environ.get("VERCEL", "0") == "1"
 ENABLE_CORS = os.environ.get("ENABLE_CORS", "true").lower() == "true"
-CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
+
+# CORS configuration
+# In production, set CORS_ORIGINS env var to comma-separated list of domains
+# Example: https://app1.example.com,https://app2.example.com
+# Default to safe restrictive setting for production
+ENV = os.environ.get("ENV", "development")
+if ENV == "production" and os.environ.get("CORS_ORIGINS", "") == "":
+    # In production with no explicit setting, use restrictive default
+    CORS_ORIGINS = ["https://console.hana.ondemand.com", "https://hana.cloud.sap"]
+    logger.warning("Using default restrictive CORS settings for production environment")
+else:
+    # Use provided CORS settings or wildcard for development
+    CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
+
 API_VERSION = os.environ.get("API_VERSION", VERSION)
 PLATFORM = os.environ.get("PLATFORM", "unknown")
 
@@ -117,18 +130,38 @@ app = FastAPI(
 # Configure CORS
 if ENABLE_CORS:
     if "*" in CORS_ORIGINS:
-        logger.warning(
-            "CORS is configured to allow all origins (*). "
-            "This is not recommended for production environments."
+        if ENV == "production":
+            logger.error(
+                "CORS is configured to allow all origins (*) in production! "
+                "This is a security risk. Please set specific CORS_ORIGINS."
+            )
+        else:
+            logger.warning(
+                "CORS is configured to allow all origins (*). "
+                "This is only suitable for development environments."
+            )
+    
+    # Configure proper CORS middleware based on environment
+    if ENV == "production":
+        # In production, restrict methods and headers
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=CORS_ORIGINS,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "DELETE"],  # Specific allowed methods
+            allow_headers=["Content-Type", "Authorization"],  # Specific allowed headers
+            max_age=86400,  # Cache preflight requests for 24 hours
+        )
+    else:
+        # In development, more permissive settings
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=CORS_ORIGINS,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
         )
     
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=CORS_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
     logger.info(f"CORS middleware enabled with {len(CORS_ORIGINS)} allowed origins")
 
 # Initialize services

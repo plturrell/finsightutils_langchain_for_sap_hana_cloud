@@ -1,0 +1,182 @@
+name: Automated Docker Build & Push
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'Dockerfile*'
+      - 'api/**'
+      - 'langchain_hana/**'
+      - 'requirements*.txt'
+      - '.github/workflows/docker-automated-build.yml'
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly build on Sunday at midnight
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'cpu-secure'
+        type: choice
+        options:
+          - cpu-secure
+          - gpu-secure
+          - minimal-secure
+          - arrow-flight
+          - all
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      date_tag: ${{ steps.set-vars.outputs.date_tag }}
+    steps:
+      - name: Set build date
+        id: set-vars
+        run: echo "date_tag=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Set build matrix
+        id: set-matrix
+        run: |
+          if [[ "${{ github.event.inputs.build_type }}" == "all" ]]; then
+            echo "matrix={\"type\":[\"cpu-secure\",\"gpu-secure\",\"minimal-secure\",\"arrow-flight\"]}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.build_type }}" != "" ]]; then
+            echo "matrix={\"type\":[\"${{ github.event.inputs.build_type }}\"]}" >> $GITHUB_OUTPUT
+          else
+            # Default to CPU secure build for normal pushes
+            echo "matrix={\"type\":[\"cpu-secure\"]}" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-push:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          platforms: linux/amd64
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set build variables
+        id: vars
+        run: |
+          # Set base repository
+          REPO="finsightintelligence/finsight_utils_langchain_hana"
+          echo "REPO=${REPO}" >> $GITHUB_ENV
+          
+          # Set build args based on build type
+          if [[ "${{ matrix.type }}" == *"gpu"* ]]; then
+            echo "FORCE_CPU=0" >> $GITHUB_ENV
+            echo "INSTALL_GPU=true" >> $GITHUB_ENV
+          else
+            echo "FORCE_CPU=1" >> $GITHUB_ENV
+            echo "INSTALL_GPU=false" >> $GITHUB_ENV
+          fi
+          
+          # Set Dockerfile based on build type
+          if [[ "${{ matrix.type }}" == "arrow-flight" ]]; then
+            echo "DOCKERFILE=Dockerfile.arrow-flight" >> $GITHUB_ENV
+          elif [[ "${{ matrix.type }}" == "minimal-secure" ]]; then
+            echo "DOCKERFILE=Dockerfile.minimal-secure" >> $GITHUB_ENV
+          else
+            echo "DOCKERFILE=Dockerfile.secure" >> $GITHUB_ENV
+          fi
+
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REPO }}:${{ matrix.type }}
+            ${{ env.REPO }}:${{ matrix.type }}-${{ needs.setup.outputs.date_tag }}
+          platforms: linux/amd64
+          build-args: |
+            FORCE_CPU=${{ env.FORCE_CPU }}
+            INSTALL_GPU=${{ env.INSTALL_GPU }}
+          cache-from: type=registry,ref=${{ env.REPO }}:${{ matrix.type }}-buildcache
+          cache-to: type=registry,ref=${{ env.REPO }}:${{ matrix.type }}-buildcache,mode=max
+          provenance: false
+
+  verify-images:
+    needs: [setup, build-and-push]
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Check image availability
+        run: |
+          # Wait for images to be available
+          echo "Waiting for images to be available on Docker Hub..."
+          sleep 30
+          
+          # Verify images exist
+          for type in ${{ join(fromJson(needs.setup.outputs.matrix).type, ' ') }}; do
+            echo "Checking for image: finsightintelligence/finsight_utils_langchain_hana:$type-${{ needs.setup.outputs.date_tag }}"
+            
+            # Try multiple times with increasing delays
+            for i in {1..5}; do
+              if curl -s "https://hub.docker.com/v2/repositories/finsightintelligence/finsight_utils_langchain_hana/tags/?page_size=100" | grep -q "\"name\":\"$type-${{ needs.setup.outputs.date_tag }}\""; then
+                echo "✅ Image $type-${{ needs.setup.outputs.date_tag }} found!"
+                break
+              elif [ $i -eq 5 ]; then
+                echo "❌ Image $type-${{ needs.setup.outputs.date_tag }} not found after 5 attempts"
+                exit 1
+              else
+                echo "Image not found yet, retrying in $((i*10)) seconds..."
+                sleep $((i*10))
+              fi
+            done
+          done
+          
+          echo "All images verified successfully!"
+
+  notify:
+    needs: [setup, build-and-push, verify-images]
+    runs-on: ubuntu-latest
+    if: always() && github.event_name != 'pull_request'
+    steps:
+      - name: Set status
+        id: status
+        run: |
+          if [[ "${{ needs.build-and-push.result }}" == "success" && "${{ needs.verify-images.result }}" == "success" ]]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "message=✅ Docker images built and pushed successfully" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "message=❌ Docker build failed or images not verified" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create status comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `${{ steps.status.outputs.message }}
+              
+              Images built:
+              ${JSON.parse('${{ needs.setup.outputs.matrix }}').type.map(type => 
+                `- \`finsightintelligence/finsight_utils_langchain_hana:${type}\`
+                - \`finsightintelligence/finsight_utils_langchain_hana:${type}-${{ needs.setup.outputs.date_tag }}\``
+              ).join('\n')}
+              
+              [View run details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`
+            })

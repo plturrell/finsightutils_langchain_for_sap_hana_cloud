@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -26,6 +26,7 @@ import {
   MenuItem,
   Switch,
   FormControlLabel,
+  Container,
 } from '@mui/material';
 import useErrorHandler from '../hooks/useErrorHandler';
 import {
@@ -64,9 +65,19 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useSpring, useTrail, useChain, animated, useSpringRef, config } from 'react-spring';
 import { developerService, Flow, FlowNode, FlowEdge } from '../api/services';
 import VectorVisualization from '../components/VectorVisualization';
 import DebugPanel from '../components/DebugPanel';
+
+// Animated components
+const AnimatedBox = animated(Box);
+const AnimatedCard = animated(Card);
+const AnimatedPaper = animated(Paper);
+const AnimatedTypography = animated(Typography);
+const AnimatedGrid = animated(Grid);
+const AnimatedContainer = animated(Container);
+const AnimatedButton = animated(Button);
 
 // Custom node components
 function HanaConnectionNode({ data }) {
@@ -124,25 +135,75 @@ function ResultsNode({ data }) {
 }
 
 function NodeCard({ children, title, icon }) {
+  const [isHovered, setIsHovered] = useState(false);
+  
+  const springProps = useSpring({
+    transform: isHovered ? 'scale(1.03)' : 'scale(1)',
+    boxShadow: isHovered 
+      ? '0 8px 15px rgba(0, 102, 179, 0.3)' 
+      : '0 3px 8px rgba(0, 102, 179, 0.1)',
+    borderColor: isHovered 
+      ? 'rgba(0, 102, 179, 0.5)' 
+      : 'rgba(0, 102, 179, 0.2)',
+    config: { tension: 280, friction: 60 }
+  });
+  
+  const iconSpring = useSpring({
+    transform: isHovered ? 'scale(1.2)' : 'scale(1)',
+    filter: isHovered 
+      ? 'drop-shadow(0 0 6px rgba(0, 102, 179, 0.5))' 
+      : 'drop-shadow(0 0 0px rgba(0, 102, 179, 0))',
+    config: { tension: 300, friction: 10 }
+  });
+
   return (
-    <Paper 
-      elevation={2} 
-      sx={{ 
-        p: 1, 
-        minWidth: 200,
-        border: '1px solid rgba(0, 102, 179, 0.2)',
-        borderRadius: 2,
-      }}
+    <animated.div
+      style={springProps}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-        {icon}
-        <Typography variant="subtitle2" sx={{ ml: 1, fontWeight: 500 }}>
-          {title}
-        </Typography>
-      </Box>
-      <Divider sx={{ mb: 1 }} />
-      {children}
-    </Paper>
+      <Paper 
+        elevation={2} 
+        sx={{ 
+          p: 1, 
+          minWidth: 200,
+          border: '1px solid rgba(0, 102, 179, 0.2)',
+          borderRadius: 2,
+          transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <animated.div style={iconSpring}>
+            {icon}
+          </animated.div>
+          <Typography 
+            variant="subtitle2" 
+            sx={{ 
+              ml: 1, 
+              fontWeight: 600,
+              background: isHovered 
+                ? 'linear-gradient(90deg, #0066B3, #2a8fd8)' 
+                : 'linear-gradient(90deg, #0066B3, #0066B3)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              textFillColor: 'transparent',
+              transition: 'all 0.3s ease',
+            }}
+          >
+            {title}
+          </Typography>
+        </Box>
+        <Divider 
+          sx={{ 
+            mb: 1,
+            borderColor: isHovered ? 'rgba(0, 102, 179, 0.5)' : 'rgba(0, 0, 0, 0.12)',
+            transition: 'all 0.3s ease',
+          }} 
+        />
+        {children}
+      </Paper>
+    </animated.div>
   );
 }
 
@@ -344,7 +405,78 @@ const Developer: React.FC = () => {
   const [currentFlowDescription, setCurrentFlowDescription] = useState('A LangChain integration with SAP HANA Cloud for semantic search with GPU acceleration');
   const [savedFlows, setSavedFlows] = useState<Flow[]>([]);
   const [loadFlowDialogOpen, setLoadFlowDialogOpen] = useState(false);
+  const [animationsVisible, setAnimationsVisible] = useState<boolean>(false);
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'info' | 'warning' | 'error';
+  }>({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
   const { handleError, clearError } = useErrorHandler();
+  
+  // Animation spring refs for sequence chaining
+  const headerSpringRef = useSpringRef();
+  const tabsSpringRef = useSpringRef();
+  const flowDesignerSpringRef = useSpringRef();
+  const controlsSpringRef = useSpringRef();
+  const codeSpringRef = useSpringRef();
+  
+  // Animation springs
+  const headerAnimation = useSpring({
+    ref: headerSpringRef,
+    from: { opacity: 0, transform: 'translateY(-20px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(-20px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  const tabsAnimation = useSpring({
+    ref: tabsSpringRef,
+    from: { opacity: 0, transform: 'translateY(-10px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(-10px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  const flowDesignerAnimation = useSpring({
+    ref: flowDesignerSpringRef,
+    from: { opacity: 0, transform: 'scale(0.95)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'scale(1)' : 'scale(0.95)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  const controlsAnimation = useSpring({
+    ref: controlsSpringRef,
+    from: { opacity: 0, transform: 'translateX(20px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateX(0)' : 'translateX(20px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  const codeAnimation = useSpring({
+    ref: codeSpringRef,
+    from: { opacity: 0, transform: 'translateY(20px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(20px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  // Animation for buttons
+  const buttonProps = useSpring({
+    from: { opacity: 0, transform: 'translateY(10px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(10px)' },
+    config: { tension: 280, friction: 60 },
+    delay: 300
+  });
+  
+  // Chain animations sequence
+  useChain(
+    animationsVisible 
+      ? [headerSpringRef, tabsSpringRef, flowDesignerSpringRef, controlsSpringRef, codeSpringRef] 
+      : [codeSpringRef, controlsSpringRef, flowDesignerSpringRef, tabsSpringRef, headerSpringRef],
+    animationsVisible 
+      ? [0, 0.1, 0.2, 0.3, 0.4] 
+      : [0, 0.1, 0.2, 0.3, 0.4]
+  );
   
   // Generate Python code whenever the flow changes
   useEffect(() => {
@@ -354,6 +486,14 @@ const Developer: React.FC = () => {
   // Fetch saved flows when the component mounts
   useEffect(() => {
     fetchSavedFlows();
+  }, []);
+  
+  // Trigger animations on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAnimationsVisible(true);
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
   
   // Function to fetch saved flows from the API
@@ -587,6 +727,112 @@ from langchain_hana.embeddings import GPUAcceleratedEmbeddings
     } catch (error) {
       console.error("Error saving flow:", error);
       handleError(error);
+    }
+  };
+  
+  // Handle deploying the flow to production
+  const handleDeployFlow = async () => {
+    clearError(); // Clear any previous errors
+    
+    try {
+      // First, ensure the flow is saved
+      const flow: Flow = {
+        name: currentFlowName,
+        description: currentFlowDescription,
+        nodes: nodes,
+        edges: edges,
+      };
+      
+      // Save the flow first
+      const saveResponse = await developerService.saveFlow(flow);
+      
+      if (!saveResponse.data.success) {
+        throw new Error(saveResponse.data.message || "Failed to save flow before deployment");
+      }
+      
+      const flowId = saveResponse.data.flow_id || flow.id;
+      
+      // Call the API to deploy the flow
+      const deployResponse = await developerService.deployFlow(flowId);
+      
+      if (deployResponse.data.success) {
+        // Show success message
+        setSnackbar({
+          open: true,
+          message: "Flow deployed successfully",
+          severity: "success"
+        });
+      } else {
+        throw new Error(deployResponse.data.message || "Failed to deploy flow");
+      }
+    } catch (error) {
+      console.error("Error deploying flow:", error);
+      handleError(error);
+      setSnackbar({
+        open: true,
+        message: "Failed to deploy flow: " + (error.message || "Unknown error"),
+        severity: "error"
+      });
+    }
+  };
+  
+  // Handle exporting the flow to GitHub
+  const handleExportToGitHub = async () => {
+    clearError(); // Clear any previous errors
+    
+    try {
+      // First, ensure the flow is saved
+      const flow: Flow = {
+        name: currentFlowName,
+        description: currentFlowDescription,
+        nodes: nodes,
+        edges: edges,
+      };
+      
+      // Save the flow first if it doesn't have an ID yet
+      let flowId = flow.id;
+      if (!flowId) {
+        const saveResponse = await developerService.saveFlow(flow);
+        if (!saveResponse.data.success) {
+          throw new Error(saveResponse.data.message || "Failed to save flow before export");
+        }
+        flowId = saveResponse.data.flow_id;
+      }
+      
+      // Get the generated code
+      const codeResponse = await developerService.generateCode(flow);
+      const code = codeResponse.data.code;
+      
+      // Call the API to export to GitHub
+      const exportResponse = await developerService.exportToGitHub({
+        flowId,
+        code,
+        repository: "langchain-integration-for-sap-hana-cloud",
+        path: `flows/${currentFlowName.toLowerCase().replace(/\s+/g, '-')}.py`,
+        message: `Add LangChain flow: ${currentFlowName}`,
+        description: currentFlowDescription
+      });
+      
+      if (exportResponse.data.success) {
+        // Show success message with the GitHub PR URL if available
+        setSnackbar({
+          open: true,
+          message: exportResponse.data.pull_request_url 
+            ? `Exported to GitHub: ${exportResponse.data.pull_request_url}`
+            : "Successfully exported to GitHub",
+          severity: "success"
+        });
+      } else {
+        throw new Error(exportResponse.data.message || "Failed to export to GitHub");
+      }
+    } catch (error) {
+      console.error("Error exporting to GitHub:", error);
+      handleError(error);
+      setSnackbar({
+        open: true,
+        message: "Failed to export to GitHub: " + (error.message || "Unknown error"),
+        severity: "error"
+      });
     }
   };
   
@@ -886,34 +1132,100 @@ from langchain_hana.embeddings import GPUAcceleratedEmbeddings
   };
 
   return (
-    <Box className="fade-in">
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" fontWeight="500">
+    <AnimatedBox>
+      <AnimatedBox sx={{ mb: 3 }} style={headerAnimation}>
+        <AnimatedTypography 
+          variant="h4" 
+          fontWeight="600"
+          sx={{
+            background: `linear-gradient(90deg, #0066B3, #2a8fd8)`,
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            textFillColor: 'transparent',
+            letterSpacing: '0.02em',
+          }}
+        >
           Visual Developer
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
+        </AnimatedTypography>
+        <AnimatedTypography 
+          variant="body1" 
+          color="text.secondary"
+          sx={{
+            maxWidth: '800px',
+            lineHeight: 1.6,
+          }}
+        >
           Visually design and test your LangChain integration with SAP HANA Cloud
-        </Typography>
-      </Box>
+        </AnimatedTypography>
+      </AnimatedBox>
       
-      <Tabs value={tabValue} onChange={handleTabChange} sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tab icon={<FlowIcon />} label="Visual Designer" iconPosition="start" />
-        <Tab icon={<CodeIcon />} label="Generated Code" iconPosition="start" />
-        <Tab icon={<PreviewIcon />} label="Preview" iconPosition="start" />
-        <Tab icon={<BubbleChartIcon />} label="Vector Explorer" iconPosition="start" />
-        <Tab icon={<DebugIcon />} label="Debugger" iconPosition="start" />
-      </Tabs>
+      <animated.div style={tabsAnimation}>
+        <Tabs 
+          value={tabValue} 
+          onChange={handleTabChange} 
+          sx={{ 
+            borderBottom: 1, 
+            borderColor: 'divider', 
+            mb: 3,
+            '& .MuiTab-root': {
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                transform: 'translateY(-2px)',
+                color: '#0066B3',
+              },
+            },
+            '& .Mui-selected': {
+              fontWeight: 600,
+              color: '#0066B3',
+            },
+            '& .MuiTabs-indicator': {
+              height: 3,
+              borderRadius: '3px 3px 0 0',
+              background: 'linear-gradient(90deg, #0066B3, #2a8fd8)',
+            }
+          }}
+        >
+          <Tab 
+            icon={<FlowIcon sx={{ filter: tabValue === 0 ? 'drop-shadow(0 0 4px rgba(0, 102, 179, 0.5))' : 'none' }} />} 
+            label="Visual Designer" 
+            iconPosition="start" 
+          />
+          <Tab 
+            icon={<CodeIcon sx={{ filter: tabValue === 1 ? 'drop-shadow(0 0 4px rgba(0, 102, 179, 0.5))' : 'none' }} />} 
+            label="Generated Code" 
+            iconPosition="start" 
+          />
+          <Tab 
+            icon={<PreviewIcon sx={{ filter: tabValue === 2 ? 'drop-shadow(0 0 4px rgba(0, 102, 179, 0.5))' : 'none' }} />} 
+            label="Preview" 
+            iconPosition="start" 
+          />
+          <Tab 
+            icon={<BubbleChartIcon sx={{ filter: tabValue === 3 ? 'drop-shadow(0 0 4px rgba(0, 102, 179, 0.5))' : 'none' }} />} 
+            label="Vector Explorer" 
+            iconPosition="start" 
+          />
+          <Tab 
+            icon={<DebugIcon sx={{ filter: tabValue === 4 ? 'drop-shadow(0 0 4px rgba(0, 102, 179, 0.5))' : 'none' }} />} 
+            label="Debugger" 
+            iconPosition="start" 
+          />
+        </Tabs>
+      </animated.div>
       
       {tabValue === 0 && (
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={9}>
-            <Paper 
+        <AnimatedGrid container spacing={3}>
+          <AnimatedGrid item xs={12} md={9} style={flowDesignerAnimation}>
+            <AnimatedPaper 
               variant="outlined" 
               sx={{ 
                 height: 600, 
                 p: 0,
                 borderRadius: 2,
                 overflow: 'hidden',
+                boxShadow: '0 8px 24px rgba(0, 102, 179, 0.15)',
+                border: '1px solid rgba(0, 102, 179, 0.2)',
               }}
             >
               <ReactFlow
@@ -936,78 +1248,245 @@ from langchain_hana.embeddings import GPUAcceleratedEmbeddings
                 />
                 <Background gap={12} size={1} />
                 <Panel position="top-right">
-                  <Button
+                  <AnimatedButton
                     variant="contained"
                     color="primary"
                     startIcon={<AddIcon />}
                     onClick={() => setAddNodeDialogOpen(true)}
-                    sx={{ mr: 1 }}
+                    sx={{ 
+                      mr: 1,
+                      background: 'linear-gradient(90deg, #0066B3, #2a8fd8)',
+                      boxShadow: '0 4px 12px rgba(0, 102, 179, 0.2)',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 6px 16px rgba(0, 102, 179, 0.3)',
+                      }
+                    }}
+                    style={buttonProps}
                   >
                     Add Node
-                  </Button>
-                  <Button
+                  </AnimatedButton>
+                  <AnimatedButton
                     variant="contained"
                     color="primary"
                     startIcon={running ? <CircularProgress size={20} color="inherit" /> : <RunIcon />}
                     onClick={handleRun}
                     disabled={running}
+                    sx={{ 
+                      background: running ? '#0066B3' : 'linear-gradient(90deg, #0066B3, #2a8fd8)',
+                      boxShadow: '0 4px 12px rgba(0, 102, 179, 0.2)',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 6px 16px rgba(0, 102, 179, 0.3)',
+                      }
+                    }}
+                    style={buttonProps}
                   >
                     {running ? 'Running...' : 'Run Flow'}
-                  </Button>
+                  </AnimatedButton>
                 </Panel>
               </ReactFlow>
-            </Paper>
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <Card sx={{ height: '100%' }}>
+            </AnimatedPaper>
+          </AnimatedGrid>
+          <AnimatedGrid item xs={12} md={3} style={controlsAnimation}>
+            <AnimatedCard 
+              sx={{ 
+                height: '100%',
+                borderRadius: '12px',
+                boxShadow: '0 6px 20px rgba(0,0,0,0.05)',
+                transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+                border: '1px solid rgba(0, 102, 179, 0.1)',
+                '&:hover': {
+                  boxShadow: '0 12px 28px rgba(0,0,0,0.1), 0 8px 10px rgba(0,0,0,0.08)',
+                }
+              }}
+            >
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <AnimatedTypography 
+                  variant="h6" 
+                  gutterBottom
+                  sx={{
+                    fontWeight: 600,
+                    background: `linear-gradient(90deg, #0066B3, #2a8fd8)`,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    textFillColor: 'transparent',
+                  }}
+                >
                   Flow Controls
-                </Typography>
+                </AnimatedTypography>
                 <Divider sx={{ mb: 2 }} />
                 
-                <Button 
+                <AnimatedButton 
                   variant="contained" 
                   color="primary" 
                   fullWidth 
                   startIcon={running ? <CircularProgress size={20} color="inherit" /> : <RunIcon />}
                   onClick={handleRun}
                   disabled={running}
-                  sx={{ mb: 2 }}
+                  style={buttonProps}
+                  sx={{ 
+                    mb: 2,
+                    background: running ? '#0066B3' : 'linear-gradient(90deg, #0066B3, #2a8fd8)',
+                    boxShadow: '0 4px 12px rgba(0, 102, 179, 0.2)',
+                    transition: 'all 0.3s ease',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 6px 16px rgba(0, 102, 179, 0.3)',
+                    },
+                    '&:after': {
+                      content: '""',
+                      position: 'absolute',
+                      width: '100%',
+                      height: '100%',
+                      top: 0,
+                      left: 0,
+                      pointerEvents: 'none',
+                      background: 'radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 60%)',
+                      transform: 'scale(0, 0)',
+                      opacity: 0,
+                      transition: 'transform 0.4s, opacity 0.3s',
+                    },
+                    '&:active:after': {
+                      transform: 'scale(2, 2)',
+                      opacity: 0,
+                      transition: '0s',
+                    },
+                  }}
                 >
                   {running ? 'Running...' : 'Run Flow'}
-                </Button>
+                </AnimatedButton>
                 
-                <Button 
+                <AnimatedButton 
                   variant="outlined" 
                   color="primary" 
                   fullWidth 
                   startIcon={<SaveIcon />}
                   onClick={handleSaveFlow}
-                  sx={{ mb: 2 }}
+                  style={{...buttonProps, delay: 350}}
+                  sx={{ 
+                    mb: 2,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    borderColor: '#0066B3',
+                    color: '#0066B3',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 6px 16px rgba(0, 102, 179, 0.1)',
+                      borderColor: '#2a8fd8',
+                    },
+                    '&:after': {
+                      content: '""',
+                      position: 'absolute',
+                      width: '100%',
+                      height: '100%',
+                      top: 0,
+                      left: 0,
+                      pointerEvents: 'none',
+                      background: 'radial-gradient(circle, rgba(0, 102, 179, 0.2) 0%, rgba(0, 102, 179, 0) 60%)',
+                      transform: 'scale(0, 0)',
+                      opacity: 0,
+                      transition: 'transform 0.4s, opacity 0.3s',
+                    },
+                    '&:active:after': {
+                      transform: 'scale(2, 2)',
+                      opacity: 0,
+                      transition: '0s',
+                    },
+                  }}
                 >
                   Save Flow
-                </Button>
+                </AnimatedButton>
                 
-                <Button 
+                <AnimatedButton 
                   variant="outlined" 
                   color="primary" 
                   fullWidth 
                   startIcon={<CloudUploadIcon />}
-                  sx={{ mb: 2 }}
+                  onClick={handleDeployFlow}
+                  style={{...buttonProps, delay: 400}}
+                  sx={{ 
+                    mb: 2,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    borderColor: '#0066B3',
+                    color: '#0066B3',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 6px 16px rgba(0, 102, 179, 0.1)',
+                      borderColor: '#2a8fd8',
+                    },
+                    '&:after': {
+                      content: '""',
+                      position: 'absolute',
+                      width: '100%',
+                      height: '100%',
+                      top: 0,
+                      left: 0,
+                      pointerEvents: 'none',
+                      background: 'radial-gradient(circle, rgba(0, 102, 179, 0.2) 0%, rgba(0, 102, 179, 0) 60%)',
+                      transform: 'scale(0, 0)',
+                      opacity: 0,
+                      transition: 'transform 0.4s, opacity 0.3s',
+                    },
+                    '&:active:after': {
+                      transform: 'scale(2, 2)',
+                      opacity: 0,
+                      transition: '0s',
+                    },
+                  }}
                 >
                   Deploy Flow
-                </Button>
+                </AnimatedButton>
                 
-                <Button 
+                <AnimatedButton 
                   variant="outlined" 
                   color="primary" 
                   fullWidth 
                   startIcon={<GitHubIcon />}
-                  sx={{ mb: 2 }}
+                  onClick={handleExportToGitHub}
+                  style={{...buttonProps, delay: 450}}
+                  sx={{ 
+                    mb: 2,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    borderColor: '#0066B3',
+                    color: '#0066B3',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 6px 16px rgba(0, 102, 179, 0.1)',
+                      borderColor: '#2a8fd8',
+                    },
+                    '&:after': {
+                      content: '""',
+                      position: 'absolute',
+                      width: '100%',
+                      height: '100%',
+                      top: 0,
+                      left: 0,
+                      pointerEvents: 'none',
+                      background: 'radial-gradient(circle, rgba(0, 102, 179, 0.2) 0%, rgba(0, 102, 179, 0) 60%)',
+                      transform: 'scale(0, 0)',
+                      opacity: 0,
+                      transition: 'transform 0.4s, opacity 0.3s',
+                    },
+                    '&:active:after': {
+                      transform: 'scale(2, 2)',
+                      opacity: 0,
+                      transition: '0s',
+                    },
+                  }}
                 >
                   Export to GitHub
-                </Button>
+                </AnimatedButton>
                 
                 <Divider sx={{ my: 2 }} />
                 
@@ -1054,49 +1533,124 @@ from langchain_hana.embeddings import GPUAcceleratedEmbeddings
       )}
       
       {tabValue === 1 && (
-        <Card>
-          <CardContent>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
-                Generated Python Code
-              </Typography>
-              <Box>
-                <Tooltip title="Copy code">
-                  <IconButton onClick={handleCopyCode}>
-                    <CopyIcon />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Download code">
-                  <IconButton onClick={handleDownloadCode}>
-                    <DownloadIcon />
-                  </IconButton>
-                </Tooltip>
+        <animated.div style={codeAnimation}>
+          <AnimatedCard
+            sx={{ 
+              borderRadius: '12px',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.05)',
+              transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+              border: '1px solid rgba(0, 102, 179, 0.1)',
+              '&:hover': {
+                boxShadow: '0 12px 28px rgba(0,0,0,0.1), 0 8px 10px rgba(0,0,0,0.08)',
+              }
+            }}
+          >
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <AnimatedTypography 
+                  variant="h6"
+                  sx={{
+                    fontWeight: 600,
+                    background: `linear-gradient(90deg, #0066B3, #2a8fd8)`,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    textFillColor: 'transparent',
+                  }}
+                >
+                  Generated Python Code
+                </AnimatedTypography>
+                <Box>
+                  <Tooltip title="Copy code">
+                    <IconButton 
+                      onClick={handleCopyCode}
+                      sx={{
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          transform: 'scale(1.1)',
+                          color: '#0066B3',
+                          backgroundColor: 'rgba(0, 102, 179, 0.05)',
+                        }
+                      }}
+                    >
+                      <CopyIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Download code">
+                    <IconButton 
+                      onClick={handleDownloadCode}
+                      sx={{
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          transform: 'scale(1.1)',
+                          color: '#0066B3',
+                          backgroundColor: 'rgba(0, 102, 179, 0.05)',
+                        }
+                      }}
+                    >
+                      <DownloadIcon />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
               </Box>
-            </Box>
-            <Divider sx={{ mb: 2 }} />
-            
-            <SyntaxHighlighter
-              language="python"
-              style={atomDark}
-              customStyle={{
-                borderRadius: '8px',
-                padding: '16px',
-                maxHeight: '600px',
-              }}
-            >
-              {generatedCode}
-            </SyntaxHighlighter>
-          </CardContent>
-        </Card>
+              <Divider sx={{ mb: 2 }} />
+              
+              <animated.div
+                style={{
+                  opacity: animationsVisible ? 1 : 0,
+                  transform: animationsVisible ? 'translateY(0)' : 'translateY(20px)',
+                  transition: 'opacity 0.5s ease, transform 0.5s ease',
+                  transitionDelay: '0.3s',
+                }}
+              >
+                <SyntaxHighlighter
+                  language="python"
+                  style={atomDark}
+                  customStyle={{
+                    borderRadius: '12px',
+                    padding: '16px',
+                    maxHeight: '600px',
+                    boxShadow: 'inset 0 0 10px rgba(0,0,0,0.1)',
+                    border: '1px solid rgba(0, 0, 0, 0.05)',
+                  }}
+                >
+                  {generatedCode}
+                </SyntaxHighlighter>
+              </animated.div>
+            </CardContent>
+          </AnimatedCard>
+        </animated.div>
       )}
       
       {tabValue === 2 && (
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Flow Preview
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
+        <animated.div style={codeAnimation}>
+          <AnimatedCard
+            sx={{ 
+              borderRadius: '12px',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.05)',
+              transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+              border: '1px solid rgba(0, 102, 179, 0.1)',
+              '&:hover': {
+                boxShadow: '0 12px 28px rgba(0,0,0,0.1), 0 8px 10px rgba(0,0,0,0.08)',
+              }
+            }}
+          >
+            <CardContent>
+              <AnimatedTypography 
+                variant="h6" 
+                gutterBottom
+                sx={{
+                  fontWeight: 600,
+                  background: `linear-gradient(90deg, #0066B3, #2a8fd8)`,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  textFillColor: 'transparent',
+                }}
+              >
+                Flow Preview
+              </AnimatedTypography>
+              <Divider sx={{ mb: 2 }} />
             
             <Alert severity="info" sx={{ mb: 3 }}>
               This preview shows what will happen when you run this flow with the current configuration.
@@ -1181,7 +1735,8 @@ from langchain_hana.embeddings import GPUAcceleratedEmbeddings
               </Button>
             </Box>
           </CardContent>
-        </Card>
+          </AnimatedCard>
+        </animated.div>
       )}
       
       {tabValue === 3 && (
@@ -1255,7 +1810,21 @@ from langchain_hana.embeddings import GPUAcceleratedEmbeddings
         autoHideDuration={2000}
         message={tabValue === 1 ? "Code copied to clipboard" : "Flow saved successfully"}
       />
-    </Box>
+      
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({...snackbar, open: false})}
+      >
+        <Alert 
+          onClose={() => setSnackbar({...snackbar, open: false})}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </AnimatedBox>
   );
 };
 

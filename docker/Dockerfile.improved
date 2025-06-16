@@ -1,0 +1,134 @@
+# Stage 1: Builder
+FROM python:3.10-slim as builder
+
+# Set build arguments
+ARG BUILD_DATE
+ARG VERSION
+
+# Set environment variables for build stage
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC \
+    PYTHONPATH=/app \
+    PIP_NO_CACHE_DIR=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    wget \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up working directory
+WORKDIR /app
+
+# Install Python dependencies management tools
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Copy requirements files
+COPY requirements.txt api/requirements.txt ./
+
+# Install Python dependencies
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt && \
+    pip install -r api/requirements.txt && \
+    pip install --no-cache-dir langchain langchain_core dumb-init==1.2.5
+
+# Stage 2: Runtime
+FROM python:3.10-slim
+
+# Set build arguments
+ARG BUILD_DATE
+ARG VERSION
+
+# Set environment variables for runtime
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC \
+    PYTHONPATH=/app \
+    HOME=/home/appuser \
+    TEST_MODE=true \
+    ENABLE_CORS=true \
+    LOG_LEVEL=INFO \
+    FLIGHT_AUTO_START=true \
+    FLIGHT_HOST=0.0.0.0 \
+    FLIGHT_PORT=8815
+
+# Create non-root user
+RUN groupadd -g 1000 appgroup && \
+    useradd -u 1000 -g appgroup -m -s /bin/bash appuser
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    dumb-init \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up working directory
+WORKDIR /app
+
+# Copy installed packages from builder stage
+COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages/
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY api/ /app/api/
+COPY langchain_hana/ /app/langchain_hana/
+COPY LICENSE README.md /app/
+
+# Create necessary directories with appropriate permissions
+RUN mkdir -p /app/cache /app/logs && \
+    chown -R appuser:appgroup /app
+
+# Add startup script
+COPY --chown=appuser:appgroup <<'EOF' /app/start.sh
+#!/bin/bash
+set -e
+
+# Check if we need to run a different command
+if [ "$1" = "shell" ]; then
+    echo "Starting shell..."
+    exec /bin/bash
+elif [ "$1" = "pytest" ]; then
+    echo "Running tests..."
+    exec pytest "${@:2}"
+elif [ "$1" = "arrow-flight" ]; then
+    echo "Starting Arrow Flight server only..."
+    exec python -m langchain_hana.flight.server
+else
+    # Start the API service
+    echo "Starting API service with Arrow Flight..."
+    exec uvicorn api.simplified_app:app --host 0.0.0.0 --port 8000
+fi
+EOF
+
+RUN chmod +x /app/start.sh
+
+# Add metadata labels
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.title="Langchain Integration for SAP HANA Cloud" \
+      org.opencontainers.image.description="Langchain Integration API with Arrow Flight for SAP HANA Cloud" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.vendor="SAP"
+
+# Expose ports for API and Arrow Flight
+EXPOSE 8000 8815
+
+# Healthcheck to verify service is running properly
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Switch to non-root user
+USER appuser
+
+# Use dumb-init as entrypoint to handle signals properly
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+
+# Set default command
+CMD ["/app/start.sh"]

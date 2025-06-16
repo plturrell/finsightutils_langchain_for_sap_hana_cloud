@@ -1,0 +1,79 @@
+# Prometheus configuration for LangChain SAP HANA Integration
+# Standard monitoring configuration
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+# Rule files for alerts and recording rules
+rule_files:
+  - "alert_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # API metrics
+  - job_name: "langchain-hana-api"
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ["api:8000"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '(.*):.*'
+        replacement: '${1}'
+      - source_labels: [__address__]
+        target_label: service
+        regex: '.*'
+        replacement: 'api'
+
+  # Arrow Flight metrics
+  - job_name: "langchain-hana-arrow-flight"
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ["arrow-flight:8000"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '(.*):.*'
+        replacement: '${1}'
+      - source_labels: [__address__]
+        target_label: service
+        regex: '.*'
+        replacement: 'arrow-flight'
+
+  # Node exporter for host metrics
+  - job_name: "node"
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ["node-exporter:9100"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '(.*):.*'
+        replacement: '${1}'
+      - source_labels: [__address__]
+        target_label: service
+        regex: '.*'
+        replacement: 'node'
+
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ["localhost:9090"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '(.*):.*'
+        replacement: '${1}'
+      - source_labels: [__address__]
+        target_label: service
+        regex: '.*'
+        replacement: 'prometheus'

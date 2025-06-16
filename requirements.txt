@@ -1,9 +1,17 @@
-fastapi>=0.100.0,<1.0.0
-uvicorn>=0.22.0,<1.0.0
-requests>=2.31.0,<3.0.0
-pyjwt>=2.8.0,<3.0.0
-pydantic>=1.10.0,<3.0.0
-python-multipart>=0.0.6,<1.0.0
-python-dotenv>=1.0.0,<2.0.0
-psutil>=5.9.0,<6.0.0
-dnspython>=2.3.0,<3.0.0
+# SAP HANA Client
+hdbcli>=2.17.0
+
+# Core dependencies
+langchain>=0.1.0
+langchain-core>=0.1.0
+sentence-transformers>=2.2.2
+numpy>=1.24.0
+
+# Optional dependencies
+torch>=2.0.0
+pandas>=1.5.0
+matplotlib>=3.7.0
+
+# For RAG applications
+langchain-openai>=0.0.1
+openai>=1.0.0

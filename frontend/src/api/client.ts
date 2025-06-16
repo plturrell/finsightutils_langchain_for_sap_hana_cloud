@@ -1,5 +1,13 @@
 import axios from 'axios';
 
+// Error tracking
+let errorHandler: ((error: any) => void) | null = null;
+
+// Method to set the global error handler
+export const setGlobalErrorHandler = (handler: (error: any) => void) => {
+  errorHandler = handler;
+};
+
 // Create a base Axios instance with default config
 const apiClient = axios.create({
   baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8000',
@@ -8,7 +16,6 @@ const apiClient = axios.create({
   },
   timeout: 30000, // 30 seconds
 });
-
 // Add a request interceptor for handling auth and other preprocessing
 apiClient.interceptors.request.use(
   (config) => {
@@ -98,8 +105,27 @@ apiClient.interceptors.response.use(
       };
     }
     
+    // Call the global error handler if it exists
+    if (errorHandler) {
+      errorHandler(error);
+    }
+    
     return Promise.reject(error);
   }
 );
+
+// Utility function for safe API calls
+export const safeApiCall = async <T>(apiFunction: () => Promise<T>, fallback: T): Promise<T> => {
+  try {
+    return await apiFunction();
+  } catch (error) {
+    console.error('API call failed:', error);
+    // Call the global error handler if it exists
+    if (errorHandler) {
+      errorHandler(error);
+    }
+    return fallback;
+  }
+};
 
 export default apiClient;

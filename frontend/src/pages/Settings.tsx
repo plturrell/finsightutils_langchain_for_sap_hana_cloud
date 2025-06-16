@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Card,
@@ -24,6 +24,7 @@ import {
   Tooltip,
   Snackbar,
   CircularProgress,
+  Container,
 } from '@mui/material';
 import {
   Save as SaveIcon,
@@ -37,8 +38,20 @@ import {
   DataObject as DataObjectIcon,
   Check as CheckIcon,
 } from '@mui/icons-material';
+import { useSpring, useTrail, useChain, animated, useSpringRef, config } from 'react-spring';
 import axios from 'axios';
 import ExperienceManager from '../components/ExperienceManager';
+
+// Animated components
+const AnimatedBox = animated(Box);
+const AnimatedCard = animated(Card);
+const AnimatedPaper = animated(Paper);
+const AnimatedTypography = animated(Typography);
+const AnimatedGrid = animated(Grid);
+const AnimatedContainer = animated(Container);
+const AnimatedButton = animated(Button);
+const AnimatedAlert = animated(Alert);
+const AnimatedDivider = animated(Divider);
 
 interface Config {
   database: {
@@ -121,6 +134,60 @@ const Settings: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'untested' | 'success' | 'error'>('untested');
+  const [animationsVisible, setAnimationsVisible] = useState<boolean>(false);
+  
+  // Animation spring refs for sequence chaining
+  const headerSpringRef = useSpringRef();
+  const tabsSpringRef = useSpringRef();
+  const cardSpringRef = useSpringRef();
+  const formSpringRef = useSpringRef();
+  const buttonSpringRef = useSpringRef();
+  
+  // Animation springs
+  const headerAnimation = useSpring({
+    ref: headerSpringRef,
+    from: { opacity: 0, transform: 'translateY(-20px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(-20px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  const tabsAnimation = useSpring({
+    ref: tabsSpringRef,
+    from: { opacity: 0, transform: 'translateY(-10px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(-10px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  const cardAnimation = useSpring({
+    ref: cardSpringRef,
+    from: { opacity: 0, transform: 'scale(0.95)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'scale(1)' : 'scale(0.95)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  const formAnimation = useSpring({
+    ref: formSpringRef,
+    from: { opacity: 0, transform: 'translateY(20px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(20px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  const buttonAnimation = useSpring({
+    ref: buttonSpringRef,
+    from: { opacity: 0, transform: 'translateY(10px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(10px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  // Chain animations sequence
+  useChain(
+    animationsVisible 
+      ? [headerSpringRef, tabsSpringRef, cardSpringRef, formSpringRef, buttonSpringRef] 
+      : [buttonSpringRef, formSpringRef, cardSpringRef, tabsSpringRef, headerSpringRef],
+    animationsVisible 
+      ? [0, 0.1, 0.2, 0.3, 0.4] 
+      : [0, 0.1, 0.2, 0.3, 0.4]
+  );
 
   // Fetch the actual config from the API
   useEffect(() => {
@@ -139,6 +206,14 @@ const Settings: React.FC = () => {
     };
     
     fetchConfig();
+  }, []);
+  
+  // Trigger animations on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAnimationsVisible(true);
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -206,21 +281,136 @@ const Settings: React.FC = () => {
   };
 
   return (
-    <Box className="fade-in">
+    <AnimatedBox>
       <ExperienceManager 
         currentComponent="settings"
         onOpenAdvanced={() => {}}
       />
       
-      {/* The original complex settings interface is hidden and replaced with SimpleSettings 
-          when simple mode is enabled through the ExperienceManager */}
-    </Box>
-  );
+      {/* Header Section */}
+      <AnimatedBox sx={{ mb: 3 }} style={headerAnimation}>
+        <AnimatedTypography 
+          variant="h4" 
+          fontWeight="600"
+          sx={{
+            background: `linear-gradient(90deg, #0066B3, #2a8fd8)`,
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            textFillColor: 'transparent',
+            letterSpacing: '0.02em',
+          }}
+        >
+          Settings
+        </AnimatedTypography>
+        <AnimatedTypography 
+          variant="body1" 
+          color="text.secondary"
+          sx={{
+            maxWidth: '800px',
+            lineHeight: 1.6,
+          }}
+        >
+          Configure your SAP HANA Cloud connection, embedding models, and GPU acceleration
+        </AnimatedTypography>
+      </AnimatedBox>
+      
+      {/* Tabs Navigation */}
+      <animated.div style={tabsAnimation}>
+        <Tabs 
+          value={tabValue} 
+          onChange={handleTabChange} 
+          sx={{ 
+            borderBottom: 1, 
+            borderColor: 'divider', 
+            mb: 3,
+            '& .MuiTab-root': {
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                transform: 'translateY(-2px)',
+                color: '#0066B3',
+              },
+            },
+            '& .Mui-selected': {
+              fontWeight: 600,
+              color: '#0066B3',
+            },
+            '& .MuiTabs-indicator': {
+              height: 3,
+              borderRadius: '3px 3px 0 0',
+              background: 'linear-gradient(90deg, #0066B3, #2a8fd8)',
+            }
+          }}
+        >
+          <Tab 
+            icon={<StorageIcon sx={{ filter: tabValue === 0 ? 'drop-shadow(0 0 4px rgba(0, 102, 179, 0.5))' : 'none' }} />} 
+            label="Database" 
+            iconPosition="start" 
+          />
+          <Tab 
+            icon={<DataObjectIcon sx={{ filter: tabValue === 1 ? 'drop-shadow(0 0 4px rgba(0, 102, 179, 0.5))' : 'none' }} />} 
+            label="Embeddings" 
+            iconPosition="start" 
+          />
+          <Tab 
+            icon={<MemoryIcon sx={{ filter: tabValue === 2 ? 'drop-shadow(0 0 4px rgba(0, 102, 179, 0.5))' : 'none' }} />} 
+            label="GPU" 
+            iconPosition="start" 
+          />
+          <Tab 
+            icon={<SettingsIcon sx={{ filter: tabValue === 3 ? 'drop-shadow(0 0 4px rgba(0, 102, 179, 0.5))' : 'none' }} />} 
+            label="API" 
+            iconPosition="start" 
+          />
+        </Tabs>
+      </animated.div>
+      
+      {/* Main Card */}
+      <AnimatedCard 
+        style={cardAnimation}
+        sx={{ 
+          borderRadius: '12px',
+          boxShadow: '0 6px 20px rgba(0,0,0,0.05)',
+          transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+          border: '1px solid rgba(0, 102, 179, 0.1)',
+          '&:hover': {
+            boxShadow: '0 12px 28px rgba(0,0,0,0.1), 0 8px 10px rgba(0,0,0,0.08)',
+          }
+        }}
+      >
+        <CardContent>
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+              <CircularProgress 
+                size={60} 
+                sx={{
+                  color: '#0066B3',
+                  filter: 'drop-shadow(0 0 4px rgba(0, 102, 179, 0.3))'
+                }}
+              />
+            </Box>
+          ) : (
+            <AnimatedBox style={formAnimation}>
+              {/* Database Settings */}
+              {tabValue === 0 && (
+                <Box>
+                  <AnimatedTypography 
+                    variant="h6" 
+                    gutterBottom
+                    sx={{
+                      fontWeight: 600,
+                      background: `linear-gradient(90deg, #0066B3, #2a8fd8)`,
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                      textFillColor: 'transparent',
+                    }}
+                  >
                     SAP HANA Cloud Database Connection
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  </AnimatedTypography>
+                  <AnimatedTypography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                     Configure the connection to your SAP HANA Cloud database instance
-                  </Typography>
+                  </AnimatedTypography>
 
                   <Grid container spacing={3}>
                     <Grid item xs={12} md={6}>
@@ -591,40 +781,165 @@ const Settings: React.FC = () => {
                 </Box>
               )}
 
-              <Divider sx={{ my: 3 }} />
+              <AnimatedDivider 
+                sx={{ 
+                  my: 3,
+                  '&::before, &::after': {
+                    borderColor: 'rgba(0, 102, 179, 0.2)',
+                  }
+                }} 
+              />
 
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-                <Button
+              <AnimatedBox 
+                sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}
+                style={buttonAnimation}
+              >
+                <AnimatedButton
                   variant="outlined"
                   color="error"
                   startIcon={<DeleteIcon />}
                   onClick={handleResetConfig}
+                  sx={{
+                    position: 'relative',
+                    overflow: 'hidden',
+                    borderColor: '#d32f2f',
+                    color: '#d32f2f',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 6px 16px rgba(211, 47, 47, 0.1)',
+                      borderColor: '#f44336',
+                      background: 'rgba(211, 47, 47, 0.05)',
+                    },
+                    '&:after': {
+                      content: '""',
+                      position: 'absolute',
+                      width: '100%',
+                      height: '100%',
+                      top: 0,
+                      left: 0,
+                      pointerEvents: 'none',
+                      background: 'radial-gradient(circle, rgba(211, 47, 47, 0.2) 0%, rgba(211, 47, 47, 0) 60%)',
+                      transform: 'scale(0, 0)',
+                      opacity: 0,
+                      transition: 'transform 0.4s, opacity 0.3s',
+                    },
+                    '&:active:after': {
+                      transform: 'scale(2, 2)',
+                      opacity: 0,
+                      transition: '0s',
+                    },
+                  }}
                 >
                   Reset to Default
-                </Button>
-                <Button
+                </AnimatedButton>
+                <AnimatedButton
                   variant="outlined"
                   color="primary"
                   startIcon={<RefreshIcon />}
                   onClick={() => setConfig(defaultConfig)}
+                  sx={{
+                    position: 'relative',
+                    overflow: 'hidden',
+                    borderColor: '#0066B3',
+                    color: '#0066B3',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 6px 16px rgba(0, 102, 179, 0.1)',
+                      borderColor: '#2a8fd8',
+                      background: 'rgba(0, 102, 179, 0.05)',
+                    },
+                    '&:after': {
+                      content: '""',
+                      position: 'absolute',
+                      width: '100%',
+                      height: '100%',
+                      top: 0,
+                      left: 0,
+                      pointerEvents: 'none',
+                      background: 'radial-gradient(circle, rgba(0, 102, 179, 0.2) 0%, rgba(0, 102, 179, 0) 60%)',
+                      transform: 'scale(0, 0)',
+                      opacity: 0,
+                      transition: 'transform 0.4s, opacity 0.3s',
+                    },
+                    '&:active:after': {
+                      transform: 'scale(2, 2)',
+                      opacity: 0,
+                      transition: '0s',
+                    },
+                  }}
                 >
                   Reload
-                </Button>
-                <Button
+                </AnimatedButton>
+                <AnimatedButton
                   variant="contained"
                   color="primary"
                   startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
                   onClick={handleSaveConfig}
                   disabled={loading}
+                  sx={{
+                    position: 'relative',
+                    overflow: 'hidden',
+                    background: loading ? '#0066B3' : 'linear-gradient(90deg, #0066B3, #2a8fd8)',
+                    boxShadow: '0 4px 12px rgba(0, 102, 179, 0.2)',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 6px 16px rgba(0, 102, 179, 0.3)',
+                    },
+                    '&:after': {
+                      content: '""',
+                      position: 'absolute',
+                      width: '100%',
+                      height: '100%',
+                      top: 0,
+                      left: 0,
+                      pointerEvents: 'none',
+                      background: 'radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 60%)',
+                      transform: 'scale(0, 0)',
+                      opacity: 0,
+                      transition: 'transform 0.4s, opacity 0.3s',
+                    },
+                    '&:active:after': {
+                      transform: 'scale(2, 2)',
+                      opacity: 0,
+                      transition: '0s',
+                    },
+                  }}
                 >
                   Save Configuration
-                </Button>
-              </Box>
-            </Box>
+                </AnimatedButton>
+              </AnimatedBox>
+            </AnimatedBox>
           )}
         </CardContent>
-      </Card>
-    </Box>
+      </AnimatedCard>
+      
+      {/* Success Snackbar */}
+      <Snackbar
+        open={saved}
+        autoHideDuration={5000}
+        onClose={() => setSaved(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSaved(false)}
+          severity="success"
+          variant="filled"
+          sx={{ 
+            width: '100%',
+            boxShadow: '0 4px 12px rgba(0, 102, 179, 0.2)',
+            '& .MuiAlert-icon': {
+              filter: 'drop-shadow(0 0 2px rgba(255, 255, 255, 0.5))'
+            }
+          }}
+          icon={<CheckIcon sx={{ animation: 'pulse 2s infinite' }} />}
+        >
+          Configuration saved successfully!
+        </Alert>
+      </Snackbar>
+    </AnimatedBox>
   );
 };
 

@@ -1,0 +1,75 @@
+version: '3.8'
+
+# Direct approach using NVIDIA base image without custom build
+# This avoids the "no space left on device" error during builds
+
+services:
+  api:
+    # Use NVIDIA PyTorch image directly
+    image: nvcr.io/nvidia/pytorch:23.12-py3
+    container_name: sap-hana-langchain-api-nvidia
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount the API code directory into the container
+      - ../api:/app
+      # Mount the model repository
+      - nvidia-model-repo:/app/model-repository
+      # Mount the config directory
+      - nvidia-config:/app/config
+    working_dir: /app
+    environment:
+      - TZ=UTC
+      - PORT=8000
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - NGC_API_KEY=${NGC_API_KEY:-}
+      - HANA_HOST=${HANA_HOST:-}
+      - HANA_PORT=${HANA_PORT:-443}
+      - HANA_USER=${HANA_USER:-}
+      - HANA_PASSWORD=${HANA_PASSWORD:-}
+      - PYTHONPATH=/app
+    # Install dependencies and start the application
+    command: >
+      bash -c "pip install --no-cache-dir -r requirements.txt &&
+               uvicorn api.core.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    networks:
+      - nvidia-network
+
+  frontend:
+    image: node:18-alpine
+    container_name: sap-hana-langchain-frontend
+    volumes:
+      - ../frontend:/app
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+    command: >
+      sh -c "npm install &&
+             npm run dev -- --host 0.0.0.0"
+    networks:
+      - nvidia-network
+    depends_on:
+      - api
+
+volumes:
+  nvidia-model-repo:
+  nvidia-config:
+
+networks:
+  nvidia-network:
+    name: nvidia-network

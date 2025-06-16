@@ -29,9 +29,60 @@ class DocumentModel(BaseModel):
 
 class AddTextsRequest(BaseModel):
     """Request model for adding texts."""
-    texts: List[str]
-    metadatas: Optional[List[Dict[str, Any]]] = None
-    table_name: Optional[str] = None
+    texts: List[str] = Field(
+        ...,  # Required field
+        min_items=1,
+        max_items=1000,  # Limit batch size to prevent DoS
+        description="List of text documents to add (1-1000 items)"
+    )
+    metadatas: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="List of metadata dictionaries, one per document"
+    )
+    table_name: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        description="Name of the table to add documents to"
+    )
+    
+    @validator('texts')
+    def validate_texts(cls, v):
+        """Validate text documents."""
+        for i, text in enumerate(v):
+            if not isinstance(text, str):
+                raise ValueError(f"Document at index {i} must be a string")
+            if len(text) > 100000:  # 100KB limit per document
+                raise ValueError(f"Document at index {i} exceeds maximum length (100KB)")
+        return v
+    
+    @validator('metadatas')
+    def validate_metadatas(cls, v, values):
+        """Validate metadata structure and length."""
+        if v is not None:
+            texts = values.get('texts', [])
+            if len(v) != len(texts):
+                raise ValueError(f"Number of metadata items ({len(v)}) must match number of texts ({len(texts)})")
+            
+            for i, metadata in enumerate(v):
+                if not isinstance(metadata, dict):
+                    raise ValueError(f"Metadata at index {i} must be a dictionary")
+                
+                # Check metadata keys are valid
+                for key in metadata:
+                    if not isinstance(key, str):
+                        raise ValueError(f"Metadata key {key} at index {i} must be a string")
+                    if not key.isalnum() and not key.startswith("_"):
+                        raise ValueError(f"Metadata key {key} at index {i} contains invalid characters")
+                    if len(key) > 64:
+                        raise ValueError(f"Metadata key {key} at index {i} is too long (max 64 chars)")
+                
+                # Limit total metadata size to prevent abuse
+                import json
+                metadata_size = len(json.dumps(metadata))
+                if metadata_size > 10000:  # 10KB limit per metadata object
+                    raise ValueError(f"Metadata at index {i} exceeds maximum size (10KB)")
+        return v
 
 
 class UpdateTextsRequest(BaseModel):
@@ -69,34 +120,147 @@ class DocumentResponse(BaseModel):
 class QueryRequest(BaseModel):
     """Request model for querying."""
     query: str
-    k: int = 4
+    k: int = Field(
+        default=4, 
+        ge=1, 
+        le=100, 
+        description="Number of documents to return (1-100)"
+    )
     filter: Optional[Dict[str, Any]] = None
-    table_name: Optional[str] = None
+    table_name: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        description="Name of the table to query"
+    )
+    
+    @validator('query')
+    def validate_query(cls, v):
+        """Validate query string."""
+        if not v.strip():
+            raise ValueError("Query string cannot be empty")
+        if len(v) > 8192:
+            raise ValueError("Query string is too long (max 8192 characters)")
+        return v
+    
+    @validator('filter')
+    def validate_filter(cls, v):
+        """Validate filter structure."""
+        if v is not None:
+            # Check for potentially dangerous patterns in filter keys
+            for key in v.keys():
+                if not isinstance(key, str):
+                    raise ValueError(f"Filter key {key} must be a string")
+                if "$" in key and not key.startswith("$"):
+                    raise ValueError(f"Invalid filter key format: {key}")
+            
+            # Check nested depth to prevent filter bombs
+            def check_depth(obj, current_depth=0, max_depth=5):
+                if current_depth > max_depth:
+                    raise ValueError(f"Filter too deeply nested (max {max_depth} levels)")
+                if isinstance(obj, dict):
+                    for _, v in obj.items():
+                        check_depth(v, current_depth + 1, max_depth)
+                elif isinstance(obj, list):
+                    for item in obj:
+                        check_depth(item, current_depth + 1, max_depth)
+            
+            check_depth(v)
+        return v
 
 
 class VectorQueryRequest(BaseModel):
     """Request model for vector querying."""
     embedding: List[float]
-    k: int = 4
+    k: int = Field(
+        default=4, 
+        ge=1, 
+        le=100, 
+        description="Number of documents to return (1-100)"
+    )
     filter: Optional[Dict[str, Any]] = None
-    table_name: Optional[str] = None
+    table_name: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        description="Name of the table to query"
+    )
     
     @validator('embedding')
     def validate_embedding(cls, v):
         """Validate embedding vector."""
         if not v:
             raise ValueError("Embedding vector cannot be empty")
+        if len(v) > 4096:
+            raise ValueError("Embedding vector too large (max 4096 dimensions)")
+        for value in v:
+            if not isinstance(value, (int, float)):
+                raise ValueError(f"Invalid embedding value: {value}. Must be numeric")
+        return v
+    
+    @validator('filter')
+    def validate_filter(cls, v):
+        """Validate filter structure."""
+        if v is not None:
+            # Check for potentially dangerous patterns in filter keys
+            for key in v.keys():
+                if not isinstance(key, str):
+                    raise ValueError(f"Filter key {key} must be a string")
+                if "$" in key and not key.startswith("$"):
+                    raise ValueError(f"Invalid filter key format: {key}")
+            
+            # Check nested depth to prevent filter bombs
+            def check_depth(obj, current_depth=0, max_depth=5):
+                if current_depth > max_depth:
+                    raise ValueError(f"Filter too deeply nested (max {max_depth} levels)")
+                if isinstance(obj, dict):
+                    for _, v in obj.items():
+                        check_depth(v, current_depth + 1, max_depth)
+                elif isinstance(obj, list):
+                    for item in obj:
+                        check_depth(item, current_depth + 1, max_depth)
+            
+            check_depth(v)
         return v
 
 
 class MMRQueryRequest(BaseModel):
     """Request model for MMR querying."""
     query: str
-    k: int = 4
-    fetch_k: int = 20
-    lambda_mult: float = 0.5
+    k: int = Field(
+        default=4, 
+        ge=1, 
+        le=100, 
+        description="Number of documents to return (1-100)"
+    )
+    fetch_k: int = Field(
+        default=20, 
+        ge=1, 
+        le=1000, 
+        description="Number of documents to fetch before applying MMR (1-1000)"
+    )
+    lambda_mult: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Balance between relevance and diversity (0.0-1.0)"
+    )
     filter: Optional[Dict[str, Any]] = None
-    table_name: Optional[str] = None
+    table_name: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        description="Name of the table to query"
+    )
+    
+    @validator('query')
+    def validate_query(cls, v):
+        """Validate query string."""
+        if not v.strip():
+            raise ValueError("Query string cannot be empty")
+        if len(v) > 8192:
+            raise ValueError("Query string is too long (max 8192 characters)")
+        return v
     
     @validator('lambda_mult')
     def validate_lambda_mult(cls, v):
@@ -104,16 +268,68 @@ class MMRQueryRequest(BaseModel):
         if not 0 <= v <= 1:
             raise ValueError("lambda_mult must be between 0 and 1")
         return v
+    
+    @validator('fetch_k')
+    def validate_fetch_k_relation(cls, v, values):
+        """Validate fetch_k in relation to k."""
+        if 'k' in values and v < values['k']:
+            raise ValueError("fetch_k must be greater than or equal to k")
+        return v
+    
+    @validator('filter')
+    def validate_filter(cls, v):
+        """Validate filter structure."""
+        if v is not None:
+            # Check for potentially dangerous patterns in filter keys
+            for key in v.keys():
+                if not isinstance(key, str):
+                    raise ValueError(f"Filter key {key} must be a string")
+                if "$" in key and not key.startswith("$"):
+                    raise ValueError(f"Invalid filter key format: {key}")
+            
+            # Check nested depth to prevent filter bombs
+            def check_depth(obj, current_depth=0, max_depth=5):
+                if current_depth > max_depth:
+                    raise ValueError(f"Filter too deeply nested (max {max_depth} levels)")
+                if isinstance(obj, dict):
+                    for _, v in obj.items():
+                        check_depth(v, current_depth + 1, max_depth)
+                elif isinstance(obj, list):
+                    for item in obj:
+                        check_depth(item, current_depth + 1, max_depth)
+            
+            check_depth(v)
+        return v
 
 
 class MMRVectorQueryRequest(BaseModel):
     """Request model for MMR vector querying."""
     embedding: List[float]
-    k: int = 4
-    fetch_k: int = 20
-    lambda_mult: float = 0.5
+    k: int = Field(
+        default=4, 
+        ge=1, 
+        le=100, 
+        description="Number of documents to return (1-100)"
+    )
+    fetch_k: int = Field(
+        default=20, 
+        ge=1, 
+        le=1000, 
+        description="Number of documents to fetch before applying MMR (1-1000)"
+    )
+    lambda_mult: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Balance between relevance and diversity (0.0-1.0)"
+    )
     filter: Optional[Dict[str, Any]] = None
-    table_name: Optional[str] = None
+    table_name: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        description="Name of the table to query"
+    )
     
     @validator('lambda_mult')
     def validate_lambda_mult(cls, v):
@@ -127,31 +343,55 @@ class MMRVectorQueryRequest(BaseModel):
         """Validate embedding vector."""
         if not v:
             raise ValueError("Embedding vector cannot be empty")
+        if len(v) > 4096:
+            raise ValueError("Embedding vector too large (max 4096 dimensions)")
+        for value in v:
+            if not isinstance(value, (int, float)):
+                raise ValueError(f"Invalid embedding value: {value}. Must be numeric")
         return v
-
-
-class DeleteRequest(BaseModel):
-    """Request model for deleting documents."""
-    filter: Dict[str, Any]
-    table_name: Optional[str] = None
+    
+    @validator('fetch_k')
+    def validate_fetch_k_relation(cls, v, values):
+        """Validate fetch_k in relation to k."""
+        if 'k' in values and v < values['k']:
+            raise ValueError("fetch_k must be greater than or equal to k")
+        return v
     
     @validator('filter')
     def validate_filter(cls, v):
-        """Validate filter."""
-        if not v:
-            raise ValueError("Filter cannot be empty")
+        """Validate filter structure."""
+        if v is not None:
+            # Check for potentially dangerous patterns in filter keys
+            for key in v.keys():
+                if not isinstance(key, str):
+                    raise ValueError(f"Filter key {key} must be a string")
+                if "$" in key and not key.startswith("$"):
+                    raise ValueError(f"Invalid filter key format: {key}")
+            
+            # Check nested depth to prevent filter bombs
+            def check_depth(obj, current_depth=0, max_depth=5):
+                if current_depth > max_depth:
+                    raise ValueError(f"Filter too deeply nested (max {max_depth} levels)")
+                if isinstance(obj, dict):
+                    for _, v in obj.items():
+                        check_depth(v, current_depth + 1, max_depth)
+                elif isinstance(obj, list):
+                    for item in obj:
+                        check_depth(item, current_depth + 1, max_depth)
+            
+            check_depth(v)
         return v
 
 
-class DocumentResponse(BaseModel):
-    """Response model for document."""
+class QueryResultDocumentResponse(BaseModel):
+    """Response model for document query results."""
     document: DocumentModel
     score: Optional[float] = None
 
 
 class QueryResponse(BaseModel):
     """Response model for query."""
-    results: List[DocumentResponse]
+    results: List[QueryResultDocumentResponse]
 
 
 class APIResponse(BaseModel):
@@ -159,6 +399,27 @@ class APIResponse(BaseModel):
     success: bool
     message: str
     data: Optional[Any] = None
+
+
+class HealthResponse(BaseModel):
+    """Health check response model."""
+    status: str
+    version: Optional[str] = None
+    environment: Optional[str] = None
+    gpu_info: Optional[Dict[str, Any]] = None
+
+
+class ConfigurationResponse(BaseModel):
+    """Configuration response model."""
+    config: Dict[str, Any]
+    environment: Optional[str] = None
+
+
+class ErrorResponse(BaseModel):
+    """Error response model."""
+    detail: str
+    status_code: int = 500
+    error_type: Optional[str] = None
 
 
 # Flow models for the visual development environment
@@ -249,6 +510,44 @@ class GetFlowResponse(Flow):
 class DeleteFlowResponse(BaseModel):
     """Response from deleting a flow."""
     success: bool
+
+# Embedding models
+class EmbeddingRequest(BaseModel):
+    """Request model for generating embeddings."""
+    text: str
+    model_name: Optional[str] = None
+    
+    @validator('text')
+    def validate_text(cls, v):
+        """Validate text."""
+        if not v.strip():
+            raise ValueError("Text cannot be empty")
+        return v
+
+class EmbeddingResponse(BaseModel):
+    """Response model for embeddings."""
+    embedding: List[float]
+    text: str
+    model_name: str
+    processing_time: float
+
+# VectorStore models
+class VectorStoreRequest(BaseModel):
+    """Request model for vector store operations."""
+    operation: str  # 'add', 'update', 'delete', 'query'
+    texts: Optional[List[str]] = None
+    vectors: Optional[List[List[float]]] = None
+    metadatas: Optional[List[Dict[str, Any]]] = None
+    filters: Optional[Dict[str, Any]] = None
+
+class VectorStoreResponse(BaseModel):
+    """Response model for vector store operations."""
+    success: bool
+    message: str
+    operation: str
+    count: int = 0
+    results: Optional[List[Any]] = None
+    processing_time: float
 
 # Vector visualization models
 class VectorDataPoint(BaseModel):

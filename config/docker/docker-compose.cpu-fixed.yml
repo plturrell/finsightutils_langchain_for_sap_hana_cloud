@@ -1,0 +1,84 @@
+services:
+  api:
+    # Use Python base image instead of NVIDIA image
+    image: python:3.10-slim
+    container_name: sap-hana-langchain-api-cpu
+    ports:
+      - "8008:8000"
+    volumes:
+      # Mount the project directory into the container
+      - ../../:/app
+      # Mount the model repository
+      - cpu-model-repo:/app/model-repository
+      # Mount the config directory
+      - cpu-config:/app/config
+    working_dir: /app
+    environment:
+      - TZ=UTC
+      - PORT=8000
+      - API_PORT=8008
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - NGC_API_KEY=${NGC_API_KEY:-}
+      - HANA_HOST=${HANA_HOST:-}
+      - HANA_PORT=${HANA_PORT:-443}
+      - HANA_USER=${HANA_USER:-}
+      - HANA_PASSWORD=${HANA_PASSWORD:-}
+      - PYTHONPATH=/app:/usr/local/lib/python3.10/site-packages
+      - USE_GPU=false
+      - CPU_ONLY_MODE=true
+      - DISABLE_GPU_CHECK=true
+      - TEST_MODE=true
+    # Install dependencies and start the application
+    command: >
+      bash -c "apt-get update && apt-get install -y curl build-essential &&
+               cd /app && 
+               mkdir -p /app/docs/pr_notes &&
+               pip install --no-cache-dir numpy scipy pandas scikit-learn torch &&
+               pip install --no-cache-dir -r requirements.txt &&
+               pip install --no-cache-dir langchain langchain_core langchain_hana transformers sentence-transformers &&
+               # Create api/gpu directory if it doesn't exist
+               mkdir -p /app/api/gpu &&
+               # Ensure multi_gpu.py is accessible through Python's import system
+               # No need for dummy modules - we now have proper CPU fallbacks
+               python -c 'import sys; print(sys.path)' &&
+               # Set environment variables for CPU-only mode
+               export CPU_ONLY_MODE=true &&
+               export DISABLE_GPU_CHECK=true &&
+               export TEST_MODE=true &&
+               # Start the API with proper Python path
+               PYTHONPATH=/app:/usr/local/lib/python3.10/site-packages uvicorn api.core.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - langchain-network
+
+  frontend:
+    image: node:18-alpine
+    container_name: sap-hana-langchain-frontend
+    volumes:
+      - ../../frontend:/app
+    working_dir: /app
+    ports:
+      - "3008:3000"
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8008}
+    command: >
+      sh -c "npm install &&
+             npm run dev -- --host 0.0.0.0"
+    networks:
+      - langchain-network
+    depends_on:
+      - api
+
+volumes:
+  cpu-model-repo:
+  cpu-config:
+
+networks:
+  langchain-network:
+    name: langchain-network

@@ -1,15 +1,79 @@
 """Multi-GPU management and load balancing."""
 
 import logging
+import sys
+import os
 import threading
 from typing import Dict, List, Optional, Tuple, Union, Any, Callable
 import time
 import queue
 import random
+from pathlib import Path
+import importlib.util
+
+# Add project root to sys.path if not already there
+# This ensures absolute imports work in all execution contexts
+project_root = str(Path(__file__).parent.parent.parent.absolute())
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+    logging.info("Adding project root to sys.path: %s", project_root)
 
 import numpy as np
 
-import gpu_utils
+# Import gpu_utils with fallback mechanism
+gpu_utils = None
+try:
+    # Try relative import first (from parent package)
+    from . import gpu_utils
+    logger = logging.getLogger(__name__)
+    logger.info("Imported gpu_utils via relative import")
+except ImportError:
+    try:
+        # Try absolute import
+        import api.gpu.gpu_utils as gpu_utils
+        logger = logging.getLogger(__name__)
+        logger.info("Imported gpu_utils via absolute import")
+    except ImportError:
+        try:
+            # Try direct file import as last resort
+            gpu_utils_path = os.path.join(os.path.dirname(__file__), "gpu_utils.py")
+            if os.path.exists(gpu_utils_path):
+                spec = importlib.util.spec_from_file_location("gpu_utils", gpu_utils_path)
+                if spec and spec.loader:
+                    gpu_utils = importlib.util.module_from_spec(spec)
+                    sys.modules["gpu_utils"] = gpu_utils
+                    spec.loader.exec_module(gpu_utils)
+                    logger = logging.getLogger(__name__)
+                    logger.info("Imported gpu_utils via direct file import")
+            
+            # Check if we still don't have gpu_utils
+            if gpu_utils is None:
+                logger = logging.getLogger(__name__)
+                logger.warning("Could not import gpu_utils. Using dummy implementation.")
+                
+                # Define minimal dummy module for CPU-only environments
+                class DummyGPUUtils:
+                    @staticmethod
+                    def is_gpu_available() -> bool:
+                        return False
+                    
+                    @staticmethod
+                    def is_torch_available() -> bool:
+                        return False
+                    
+                    @staticmethod
+                    def get_available_gpu_memory() -> Dict[int, int]:
+                        return {}
+                    
+                    @staticmethod
+                    def detect_gpus() -> List[Dict[str, Any]]:
+                        return []
+                
+                gpu_utils = DummyGPUUtils()
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error importing gpu_utils: {str(e)}")
+            raise
 
 logger = logging.getLogger(__name__)
 
@@ -454,3 +518,112 @@ def get_gpu_manager() -> GPUManager:
         _gpu_manager = GPUManager(enabled=gpu_utils.is_gpu_available())
     
     return _gpu_manager
+
+
+def distribute_workload(
+    items: List[Any], 
+    process_fn: Callable, 
+    batch_size: Optional[int] = None,
+    use_gpu: bool = True,
+    *args, 
+    **kwargs
+) -> List[Any]:
+    """
+    Distribute a workload across multiple GPUs if available.
+    
+    This is a high-level wrapper around the GPUManager's process_batch method
+    that provides a simpler interface for distributing workloads.
+    
+    Args:
+        items: List of items to process
+        process_fn: Function to apply to each batch of items
+        batch_size: Size of each batch (if None, uses an optimal size based on GPU memory)
+        use_gpu: Whether to use GPU acceleration if available
+        *args: Additional arguments to pass to process_fn
+        **kwargs: Additional keyword arguments to pass to process_fn
+        
+    Returns:
+        List of results from processing all items
+    """
+    if not use_gpu or not gpu_utils.is_gpu_available():
+        # Process on CPU if GPUs not available or not requested
+        if batch_size is None:
+            # Use a reasonable default batch size for CPU
+            batch_size = 32
+            
+        # Split into batches
+        batches = [items[i:i+batch_size] for i in range(0, len(items), batch_size)]
+        
+        # Process batches sequentially
+        results = []
+        for batch in batches:
+            batch_result = process_fn(batch, *args, **kwargs)
+            if isinstance(batch_result, list):
+                results.extend(batch_result)
+            else:
+                results.append(batch_result)
+                
+        return results
+    
+    # Process on GPUs
+    manager = get_gpu_manager()
+    return manager.process_batch(
+        items=items,
+        process_fn=process_fn,
+        batch_size=batch_size,
+        *args,
+        **kwargs
+    )
+
+
+def setup_multi_gpu(
+    enabled: bool = True,
+    device_ids: Optional[List[int]] = None,
+    memory_fraction: float = 0.9,
+    force_reinit: bool = False
+) -> bool:
+    """
+    Initialize the multi-GPU environment and manager.
+    
+    This function sets up the GPU manager with the specified configuration.
+    It is called by modules that need multi-GPU support.
+    
+    Args:
+        enabled: Whether to enable GPU support
+        device_ids: List of GPU device IDs to use (None for all available)
+        memory_fraction: Fraction of GPU memory to allocate (0.0-1.0)
+        force_reinit: Force reinitialization of the GPU manager
+    
+    Returns:
+        True if initialization was successful, False otherwise
+    """
+    try:
+        # Check if GPUs are available at all
+        if not enabled or not gpu_utils.is_gpu_available():
+            logger.info("GPU support is disabled or not available")
+            return False
+            
+        # Get the GPU manager instance
+        manager = get_gpu_manager()
+        
+        # If already initialized and not forcing reinitialization, return
+        if manager.initialized and not force_reinit:
+            logger.info("GPU manager already initialized")
+            return True
+            
+        # Set GPU memory fraction through PyTorch if available
+        try:
+            import torch
+            if torch.cuda.is_available():
+                # This is a simple approximation - actual memory management is more complex
+                torch.cuda.set_per_process_memory_fraction(memory_fraction)
+                logger.info(f"Set GPU memory fraction to {memory_fraction}")
+        except (ImportError, AttributeError):
+            logger.warning("Could not set GPU memory fraction")
+            
+        # Return initialization status
+        return manager.initialized
+        
+    except Exception as e:
+        logger.error(f"Error setting up multi-GPU environment: {str(e)}")
+        return False

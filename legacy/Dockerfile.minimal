@@ -1,0 +1,18 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir --upgrade pip setuptools && \
+    pip install --no-cache-dir fastapi uvicorn
+
+COPY minimal_health_app.py /app/
+
+# Create a non-root user for security
+RUN groupadd -r appuser && useradd -r -g appuser appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
+CMD ["python", "minimal_health_app.py"]
+
+EXPOSE 8000

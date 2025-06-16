@@ -1,0 +1,36 @@
+[
+  {
+    "query": "What are the latest earnings results for technology companies?",
+    "filter": {
+      "type": "earnings_report",
+      "sector": "Financial Technology"
+    },
+    "k": 2
+  },
+  {
+    "query": "What are the current market risks?",
+    "filter": {
+      "type": "risk_assessment"
+    },
+    "k": 2
+  },
+  {
+    "query": "Tell me about recent merger and acquisition activity",
+    "filter": {},
+    "k": 2
+  },
+  {
+    "query": "What new regulations should financial institutions be aware of?",
+    "filter": {
+      "type": "regulatory_alert"
+    },
+    "k": 1
+  },
+  {
+    "query": "What are some investment opportunities with positive outlook?",
+    "filter": {
+      "sentiment": "positive"
+    },
+    "k": 2
+  }
+]

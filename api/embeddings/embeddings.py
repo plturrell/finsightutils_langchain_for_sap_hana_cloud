@@ -7,11 +7,14 @@ import numpy as np
 from langchain_core.embeddings import Embeddings
 
 import gpu_utils
+from api.embeddings.embedding_providers import BaseEmbeddingProvider, EmbeddingProviderRegistry
 
 logger = logging.getLogger(__name__)
 
 
-class GPUAcceleratedEmbeddings(Embeddings):
+
+
+class GPUAcceleratedEmbeddings(BaseEmbeddingProvider):
     """
     GPU-accelerated embeddings using sentence-transformers.
     
@@ -108,7 +111,7 @@ class GPUAcceleratedEmbeddings(Embeddings):
         return embedding.tolist()
 
 
-class GPUHybridEmbeddings(Embeddings):
+class GPUHybridEmbeddings(BaseEmbeddingProvider):
     """
     Hybrid embeddings that can switch between SAP HANA internal embeddings
     and GPU-accelerated embeddings.
@@ -217,4 +220,12 @@ class GPUHybridEmbeddings(Embeddings):
             use_internal: Whether to use internal embeddings.
         """
         self.use_internal = use_internal
-        logger.info(f"Embedding mode set to: {'internal' if use_internal else 'external'}")
+        logger.info(f"Mode set to {'internal' if use_internal else 'external'} embeddings")
+
+
+# Register providers with the registry
+EmbeddingProviderRegistry.register("gpu", GPUAcceleratedEmbeddings)
+EmbeddingProviderRegistry.register("hybrid", GPUHybridEmbeddings)
+
+# Create an alias for the class that's being imported in __init__.py
+DefaultEmbeddingProvider = GPUHybridEmbeddings

@@ -215,6 +215,45 @@ export const healthService = {
   check: () => apiClient.get('/health'),
 };
 
+// Analytics service
+export interface RecentQuery {
+  id: number;
+  query: string;
+  timestamp: string;
+  results_count: number;
+  execution_time: number;
+}
+
+export interface PerformanceStats {
+  name: string;
+  queries: number;
+  avgTime: number;
+}
+
+export interface PerformanceComparison {
+  name: string;
+  CPU: number;
+  GPU: number;
+  TensorRT: number;
+}
+
+export const analyticsService = {
+  getRecentQueries: () => 
+    apiClient.get<RecentQuery[]>('/analytics/recent-queries'),
+  
+  getPerformanceStats: () => 
+    apiClient.get<PerformanceStats[]>('/analytics/performance'),
+  
+  getQueryCount: () => 
+    apiClient.get<{count: number}>('/analytics/query-count'),
+  
+  getAverageResponseTime: () => 
+    apiClient.get<{avgTime: number}>('/analytics/response-time'),
+    
+  getPerformanceComparison: () => 
+    apiClient.get<PerformanceComparison[]>('/analytics/performance-comparison'),
+};
+
 // Vector Store service
 export const vectorStoreService = {
   addTexts: (texts: string[], metadatas?: Record<string, any>[]) => 
@@ -257,6 +296,16 @@ export const gpuService = {
   info: () => apiClient.get('/gpu/info'),
 };
 
+// GitHub Export Options
+export interface GitHubExportOptions {
+  flowId: string;
+  code: string;
+  repository: string;
+  path: string;
+  message: string;
+  description: string;
+}
+
 // Developer service
 export const developerService = {
   runFlow: (flow: Flow) => 
@@ -276,6 +325,13 @@ export const developerService = {
   
   deleteFlow: (flowId: string) => 
     apiClient.delete(`/developer/flows/${flowId}`),
+    
+  // New methods for deployment and GitHub export
+  deployFlow: (flowId: string) => 
+    apiClient.post<APIResponse>(`/developer/flows/${flowId}/deploy`),
+    
+  exportToGitHub: (options: GitHubExportOptions) => 
+    apiClient.post<APIResponse>('/developer/export/github', options),
     
   getVectors: (request: GetVectorsRequest) => 
     apiClient.post<GetVectorsResponse>('/developer/vectors', request),
@@ -310,4 +366,404 @@ export const developerService = {
       session_id: sessionId,
       variable_names: variableNames
     }),
+};
+
+// Types for the Reasoning API
+export interface ReasoningStep {
+  step_number: number;
+  description: string;
+  reasoning: string;
+  confidence: number;
+  references: {
+    id: string;
+    relevance: number;
+    content?: string;
+  }[];
+}
+
+export interface ReasoningPathRequest {
+  query: string;
+  table_name?: string;
+  document_id?: string;
+  include_content?: boolean;
+  max_steps?: number;
+}
+
+export interface ReasoningPathResponse {
+  path_id: string;
+  query: string;
+  steps: ReasoningStep[];
+  final_result?: string;
+  metadata: Record<string, any>;
+  execution_time: number;
+}
+
+export interface TransformationStage {
+  stage_number: number;
+  name: string;
+  description: string;
+  input_type: string;
+  output_type: string;
+  duration_ms: number;
+  metadata: Record<string, any>;
+  sample_output?: any;
+}
+
+export interface TransformationRequest {
+  document_id: string;
+  table_name?: string;
+  include_intermediate?: boolean;
+  track_only?: boolean;
+}
+
+export interface TransformationResponse {
+  transformation_id: string;
+  document_id: string;
+  stages: TransformationStage[];
+  metadata: Record<string, any>;
+  execution_time: number;
+}
+
+export interface ValidationRequest {
+  reasoning_path_id: string;
+  validation_types?: string[];
+}
+
+export interface ValidationResponse {
+  validation_id: string;
+  reasoning_path_id: string;
+  results: Record<string, any>;
+  score: number;
+  suggestions: string[];
+  execution_time: number;
+}
+
+export interface MetricsRequest {
+  document_id?: string;
+  table_name?: string;
+  metric_types?: string[];
+}
+
+export interface MetricsResponse {
+  metrics_id: string;
+  document_id?: string;
+  metrics: Record<string, any>;
+  execution_time: number;
+}
+
+export interface FeedbackRequest {
+  query: string;
+  document_id?: string;
+  reasoning_path_id?: string;
+  feedback_type: string;
+  feedback_content: string;
+  rating?: number;
+  user_id?: string;
+}
+
+export interface FeedbackResponse {
+  feedback_id: string;
+  status: string;
+  message: string;
+}
+
+export interface FingerprintRequest {
+  document_id: string;
+  table_name?: string;
+  include_lineage?: boolean;
+}
+
+export interface FingerprintResponse {
+  fingerprint_id: string;
+  document_id: string;
+  signatures: Record<string, any>;
+  lineage?: Record<string, any>;
+  execution_time: number;
+}
+
+export interface ReasoningStatusResponse {
+  available: boolean;
+  features: Record<string, boolean>;
+  version?: string;
+}
+
+// Reasoning service
+export const reasoningService = {
+  trackReasoningPath: (request: ReasoningPathRequest) => 
+    apiClient.post<ReasoningPathResponse>('/reasoning/track', request),
+  
+  trackTransformation: (request: TransformationRequest) => 
+    apiClient.post<TransformationResponse>('/reasoning/transformation', request),
+  
+  validateReasoning: (request: ValidationRequest) => 
+    apiClient.post<ValidationResponse>('/reasoning/validate', request),
+  
+  calculateMetrics: (request: MetricsRequest) => 
+    apiClient.post<MetricsResponse>('/reasoning/metrics', request),
+  
+  submitFeedback: (request: FeedbackRequest) => 
+    apiClient.post<FeedbackResponse>('/reasoning/feedback', request),
+  
+  getFingerprint: (request: FingerprintRequest) => 
+    apiClient.post<FingerprintResponse>('/reasoning/fingerprint', request),
+  
+  getStatus: () => 
+    apiClient.get<APIResponse>('/reasoning/status'),
+};
+
+// Types for the Data Pipeline API
+export interface CreatePipelineRequest {
+  connection_id?: string;
+}
+
+export interface CreatePipelineResponse {
+  pipeline_id: string;
+  status: string;
+  message: string;
+}
+
+export interface RegisterDataSourceRequest {
+  pipeline_id: string;
+  schema_name: string;
+  table_name: string;
+  include_sample?: boolean;
+  sample_size?: number;
+  custom_metadata?: Record<string, any>;
+}
+
+export interface RegisterDataSourceResponse {
+  source_id: string;
+  pipeline_id: string;
+  schema_name: string;
+  table_name: string;
+  status: string;
+  message: string;
+}
+
+export interface RegisterIntermediateStageRequest {
+  pipeline_id: string;
+  stage_name: string;
+  stage_description: string;
+  source_id: string;
+  column_mapping: Record<string, string[]>;
+  data_sample?: Record<string, any>[];
+  processing_metadata?: Record<string, any>;
+}
+
+export interface RegisterIntermediateStageResponse {
+  stage_id: string;
+  pipeline_id: string;
+  stage_name: string;
+  source_id: string;
+  status: string;
+  message: string;
+}
+
+export interface RegisterVectorRequest {
+  pipeline_id: string;
+  source_id: string;
+  model_name: string;
+  vector_dimensions: number;
+  vector_sample?: number[];
+  original_text?: string;
+  processing_metadata?: Record<string, any>;
+}
+
+export interface RegisterVectorResponse {
+  vector_id: string;
+  pipeline_id: string;
+  source_id: string;
+  model_name: string;
+  status: string;
+  message: string;
+}
+
+export interface RegisterTransformationRuleRequest {
+  pipeline_id: string;
+  rule_name: string;
+  rule_description: string;
+  input_columns: string[];
+  output_columns: string[];
+  transformation_type: string;
+  transformation_params: Record<string, any>;
+}
+
+export interface RegisterTransformationRuleResponse {
+  rule_id: string;
+  pipeline_id: string;
+  rule_name: string;
+  status: string;
+  message: string;
+}
+
+export interface GetPipelineRequest {
+  pipeline_id: string;
+  source_id?: string;
+}
+
+export interface GetPipelineResponse {
+  pipeline_id: string;
+  data_sources: Record<string, any>;
+  intermediate_stages: Record<string, any>;
+  vector_representations: Record<string, any>;
+  transformation_rules: Record<string, any>;
+  created_at: number;
+}
+
+export interface GetDataLineageRequest {
+  pipeline_id: string;
+  vector_id: string;
+}
+
+export interface GetDataLineageResponse {
+  vector_id: string;
+  vector_data: Record<string, any>;
+  source_data: Record<string, any>;
+  transformation_stages: Record<string, any>[];
+  created_at: number;
+}
+
+export interface GetReverseMapRequest {
+  pipeline_id: string;
+  vector_id: string;
+  similarity_threshold?: number;
+}
+
+export interface GetReverseMapResponse {
+  vector_id: string;
+  source_data: Record<string, any>;
+  similar_vectors: Record<string, any>[];
+  threshold: number;
+  created_at: number;
+}
+
+export interface ListPipelinesResponse {
+  pipelines: Record<string, any>[];
+  count: number;
+}
+
+// Data Pipeline Service
+export const dataPipelineService = {
+  createPipeline: (request: CreatePipelineRequest) =>
+    apiClient.post<CreatePipelineResponse>('/data-pipeline/create', request),
+  
+  registerDataSource: (request: RegisterDataSourceRequest) =>
+    apiClient.post<RegisterDataSourceResponse>('/data-pipeline/register-source', request),
+  
+  registerIntermediateStage: (request: RegisterIntermediateStageRequest) =>
+    apiClient.post<RegisterIntermediateStageResponse>('/data-pipeline/register-intermediate', request),
+  
+  registerVector: (request: RegisterVectorRequest) =>
+    apiClient.post<RegisterVectorResponse>('/data-pipeline/register-vector', request),
+  
+  registerTransformationRule: (request: RegisterTransformationRuleRequest) =>
+    apiClient.post<RegisterTransformationRuleResponse>('/data-pipeline/register-rule', request),
+  
+  getPipeline: (request: GetPipelineRequest) =>
+    apiClient.post<GetPipelineResponse>('/data-pipeline/get', request),
+  
+  getDataLineage: (request: GetDataLineageRequest) =>
+    apiClient.post<GetDataLineageResponse>('/data-pipeline/lineage', request),
+  
+  getReverseMap: (request: GetReverseMapRequest) =>
+    apiClient.post<GetReverseMapResponse>('/data-pipeline/reverse-map', request),
+  
+  listPipelines: () =>
+    apiClient.get<ListPipelinesResponse>('/data-pipeline/list'),
+  
+  getStatus: () =>
+    apiClient.get<APIResponse>('/data-pipeline/status'),
+};
+
+// Types for Vector Operations API
+export interface CreateVectorRequest {
+  pipeline_id: string;
+  source_id: string;
+  table_name: string;
+  schema_name?: string;
+  model_name?: string;
+  vector_dimensions?: number;
+  normalize_vectors?: boolean;
+  chunking_strategy?: string;
+  chunk_size?: number;
+  chunk_overlap?: number;
+  max_records?: number;
+  filter_condition?: string;
+  embedding_type?: string;
+  pal_batch_size?: number;
+  use_pal_service?: boolean;
+}
+
+export interface CreateVectorResponse {
+  vector_id: string;
+  table_name: string;
+  vector_count: number;
+  model_name: string;
+  dimensions: number;
+  processing_time: number;
+  status: string;
+  message: string;
+}
+
+export interface VectorInfoRequest {
+  vector_id: string;
+}
+
+export interface VectorInfoResponse {
+  vector_id: string;
+  table_name: string;
+  vector_count: number;
+  model_name: string;
+  dimensions: number;
+  sample_vector?: number[];
+  metadata: Record<string, any>;
+  created_at?: string;
+}
+
+export interface BatchEmbeddingRequest {
+  texts: string[];
+  model_name?: string;
+  embedding_type?: string;
+  use_pal_service?: boolean;
+}
+
+export interface BatchEmbeddingResponse {
+  embeddings: number[][];
+  dimensions: number;
+  processing_time: number;
+  tokens_processed: number;
+}
+
+export interface ModelInfo {
+  id: string;
+  name: string;
+  dimensions: number;
+  description: string;
+  performance: 'fast' | 'medium' | 'slow';
+  quality: 'basic' | 'good' | 'excellent';
+  embedding_types: string[];
+  pal_service?: boolean;
+}
+
+export interface ModelsResponse {
+  models: ModelInfo[];
+  pal_available: boolean;
+  vector_engine_available: boolean;
+  recommended_model: string;
+  error?: string;
+}
+
+// Vector Operations service
+export const vectorOperationsService = {
+  createVectors: (request: CreateVectorRequest) =>
+    apiClient.post<CreateVectorResponse>('/vector-operations/create', request),
+  
+  getVectorInfo: (request: VectorInfoRequest) =>
+    apiClient.post<VectorInfoResponse>('/vector-operations/info', request),
+  
+  batchEmbed: (request: BatchEmbeddingRequest) =>
+    apiClient.post<BatchEmbeddingResponse>('/vector-operations/batch-embed', request),
+  
+  listModels: () =>
+    apiClient.get<ModelsResponse>('/vector-operations/models'),
 };

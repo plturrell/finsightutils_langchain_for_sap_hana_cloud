@@ -1,0 +1,55 @@
+# Dockerfile for Arrow Flight Integration
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy only what we need for the Arrow Flight API
+COPY api/requirements.txt /app/requirements.txt
+COPY requirements.txt /app/full_requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir pyarrow>=10.0.0 && \
+    pip install --no-cache-dir fastapi uvicorn
+
+# Copy necessary application code
+COPY api/core /app/api/core
+COPY api/routes/flight.py /app/api/routes/flight.py
+COPY api/models/flight_models.py /app/api/models/flight_models.py
+COPY api/utils /app/api/utils
+COPY api/__init__.py /app/api/__init__.py
+COPY api/database.py /app/api/database.py
+COPY api/db.py /app/api/db.py
+COPY api/health.py /app/api/health.py
+COPY api/config.py /app/api/config.py
+COPY api/settings.py /app/api/settings.py
+COPY api/version.py /app/api/version.py
+COPY langchain_hana/gpu/arrow_flight_client.py /app/langchain_hana/gpu/arrow_flight_client.py
+COPY langchain_hana/gpu/arrow_flight_server.py /app/langchain_hana/gpu/arrow_flight_server.py
+COPY langchain_hana/gpu/arrow_gpu_memory_manager.py /app/langchain_hana/gpu/arrow_gpu_memory_manager.py
+COPY langchain_hana/gpu/arrow_flight_vectorstore.py /app/langchain_hana/gpu/arrow_flight_vectorstore.py
+COPY langchain_hana/gpu/arrow_flight_multi_gpu.py /app/langchain_hana/gpu/arrow_flight_multi_gpu.py
+COPY langchain_hana/gpu/vector_serialization.py /app/langchain_hana/gpu/vector_serialization.py
+COPY langchain_hana/gpu/utils.py /app/langchain_hana/gpu/utils.py
+COPY langchain_hana/gpu/__init__.py /app/langchain_hana/gpu/__init__.py
+COPY langchain_hana/__init__.py /app/langchain_hana/__init__.py
+COPY langchain_hana/error_utils.py /app/langchain_hana/error_utils.py
+
+# Create required directories
+RUN mkdir -p /app/langchain_hana/vectorstores
+
+# Create a health check file to verify the API is healthy
+RUN echo 'from fastapi import APIRouter\n\nrouter = APIRouter()\n\n@router.get("/health")\ndef health():\n    return {"status": "ok", "message": "Arrow Flight API is healthy"}\n' > /app/api/health.py
+
+# Expose the API port
+EXPOSE 8000
+
+# Start the API
+CMD ["uvicorn", "api.core.main:app", "--host", "0.0.0.0", "--port", "8000"]

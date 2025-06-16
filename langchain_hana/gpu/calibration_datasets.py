@@ -11,6 +11,13 @@ import os
 import json
 import random
 
+# Import specialized financial calibration if available
+try:
+    from langchain_hana.gpu.financial_calibration import get_financial_calibration_dataset
+    HAS_FINANCIAL_CALIBRATION = True
+except ImportError:
+    HAS_FINANCIAL_CALIBRATION = False
+
 logger = logging.getLogger(__name__)
 
 # Common calibration texts covering different domains
@@ -109,19 +116,35 @@ TECHNICAL_CALIBRATION_TEXTS = [
     "GraphQL APIs allow clients to request exactly the data they need.",
 ]
 
-def get_domain_calibration_texts(domain: str = "general") -> List[str]:
+def get_domain_calibration_texts(domain: str = "general", count: int = 50) -> List[str]:
     """
     Get domain-specific calibration texts for INT8 quantization.
     
-    Args:
-        domain: Domain to get calibration texts for ("general", "financial", "sap", "technical", "all")
+    Parameters
+    ----------
+    domain : str, default="general"
+        Domain to get calibration texts for ("general", "financial", "sap", "technical", "all")
+    count : int, default=50
+        Number of texts to return for financial domain when using enhanced dataset
         
-    Returns:
+    Returns
+    -------
+    List[str]
         List of calibration texts
     """
     domain = domain.lower()
     if domain == "financial":
-        return FINANCIAL_CALIBRATION_TEXTS
+        # Use enhanced financial calibration if available
+        if HAS_FINANCIAL_CALIBRATION:
+            try:
+                logger.info("Using enhanced financial calibration dataset")
+                return get_financial_calibration_dataset(count=count)
+            except Exception as e:
+                logger.warning(f"Error loading enhanced financial calibration: {e}")
+                logger.info("Falling back to standard financial calibration texts")
+                return FINANCIAL_CALIBRATION_TEXTS
+        else:
+            return FINANCIAL_CALIBRATION_TEXTS
     elif domain == "sap":
         return SAP_CALIBRATION_TEXTS
     elif domain == "technical":
@@ -130,7 +153,17 @@ def get_domain_calibration_texts(domain: str = "general") -> List[str]:
         # Combine all domains with equal representation
         all_texts = []
         all_texts.extend(GENERAL_CALIBRATION_TEXTS)
-        all_texts.extend(FINANCIAL_CALIBRATION_TEXTS)
+        
+        # For financial, use enhanced dataset if available
+        if HAS_FINANCIAL_CALIBRATION:
+            try:
+                financial_texts = get_financial_calibration_dataset(count=count)
+                all_texts.extend(financial_texts)
+            except Exception:
+                all_texts.extend(FINANCIAL_CALIBRATION_TEXTS)
+        else:
+            all_texts.extend(FINANCIAL_CALIBRATION_TEXTS)
+            
         all_texts.extend(SAP_CALIBRATION_TEXTS)
         all_texts.extend(TECHNICAL_CALIBRATION_TEXTS)
         return all_texts
@@ -212,15 +245,48 @@ def create_enhanced_calibration_dataset(
     """
     Create an enhanced calibration dataset combining domain-specific and custom texts.
     
-    Args:
-        domains: Domains to include ("general", "financial", "sap", "technical")
-        count: Target number of calibration texts
-        custom_file_path: Path to custom calibration text file
+    Parameters
+    ----------
+    domains : List[str], optional
+        Domains to include ("general", "financial", "sap", "technical")
+    count : int, default=100
+        Target number of calibration texts
+    custom_file_path : str, optional
+        Path to custom calibration text file
         
-    Returns:
+    Returns
+    -------
+    List[str]
         Enhanced calibration dataset
     """
-    # Get domain-specific texts
+    # Check if financial domain is specifically requested
+    if domains is not None and "financial" in domains and len(domains) == 1:
+        # Only financial domain requested - use specialized dataset
+        if HAS_FINANCIAL_CALIBRATION:
+            try:
+                logger.info("Using specialized financial calibration dataset")
+                financial_texts = get_financial_calibration_dataset(count=count)
+                
+                # Add custom texts if available
+                custom_texts = []
+                if custom_file_path:
+                    custom_texts = load_custom_calibration_texts(custom_file_path)
+                
+                # Combine, deduplicate, and limit
+                all_texts = financial_texts + custom_texts
+                unique_texts = list(set(all_texts))
+                random.shuffle(unique_texts)
+                
+                if len(unique_texts) > count:
+                    unique_texts = unique_texts[:count]
+                
+                logger.info(f"Created enhanced financial calibration dataset with {len(unique_texts)} texts")
+                return unique_texts
+            except Exception as e:
+                logger.warning(f"Error creating financial calibration dataset: {e}")
+                logger.info("Falling back to standard mixed calibration approach")
+    
+    # Standard approach for mixed domains or if financial specialization failed
     domain_texts = get_mixed_calibration_texts(domains, count=count//2)
     
     # Add custom texts if available
@@ -239,3 +305,29 @@ def create_enhanced_calibration_dataset(
     
     logger.info(f"Created enhanced calibration dataset with {len(unique_texts)} texts")
     return unique_texts
+
+
+def load_calibration_dataset(domain: str = "general", count: int = 100) -> List[str]:
+    """
+    Load a calibration dataset for a specific domain.
+    
+    This is a convenience function that provides a simplified interface
+    for loading calibration datasets.
+    
+    Parameters
+    ----------
+    domain : str, default="general"
+        Domain to load calibration dataset for 
+        ("general", "financial", "sap", "technical", "all")
+    count : int, default=100
+        Number of calibration texts to load
+        
+    Returns
+    -------
+    List[str]
+        Calibration dataset
+    """
+    if domain == "financial" and HAS_FINANCIAL_CALIBRATION:
+        return get_financial_calibration_dataset(count=count)
+    else:
+        return get_domain_calibration_texts(domain=domain, count=count)
