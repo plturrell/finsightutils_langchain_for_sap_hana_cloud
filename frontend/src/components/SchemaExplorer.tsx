@@ -40,8 +40,21 @@ import {
   DataObject as DataObjectIcon,
   AutoAwesome as AutoAwesomeIcon,
 } from '@mui/icons-material';
+import { useSpring, animated, config, useTrail, useChain, useSpringRef } from '@react-spring/web';
 import HumanText from './HumanText';
 import apiClient from '../api/client';
+
+// Create animated versions of MUI components
+const AnimatedBox = animated(Box);
+const AnimatedCard = animated(Card);
+const AnimatedPaper = animated(Paper);
+const AnimatedTypography = animated(Typography);
+const AnimatedButton = animated(Button);
+const AnimatedTextField = animated(TextField);
+const AnimatedListItem = animated(ListItem);
+const AnimatedTableContainer = animated(TableContainer);
+const AnimatedAlert = animated(Alert);
+const AnimatedChip = animated(Chip);
 
 // Types for HANA schema explorer
 interface SchemaMetadata {
@@ -109,6 +122,19 @@ const SchemaExplorer: React.FC<SchemaExplorerProps> = ({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchResults, setSearchResults] = useState<{schema: string, table: string}[]>([]);
+  
+  // Animation states
+  const [animationsVisible, setAnimationsVisible] = useState<boolean>(false);
+  
+  // Animation refs for chained animations
+  const headerSpringRef = useSpringRef();
+  const searchSpringRef = useSpringRef();
+  const schemasSpringRef = useSpringRef();
+  const tablesSpringRef = useSpringRef();
+  const detailsSpringRef = useSpringRef();
+  const columnsSpringRef = useSpringRef();
+  const sampleSpringRef = useSpringRef();
+  const insightsSpringRef = useSpringRef();
   
   // Load schemas
   const fetchSchemas = async () => {
@@ -898,40 +924,190 @@ const SchemaExplorer: React.FC<SchemaExplorerProps> = ({
   // Initialize data on component mount
   useEffect(() => {
     fetchSchemas();
+    
+    // Trigger animations after a short delay
+    const timer = setTimeout(() => {
+      setAnimationsVisible(true);
+    }, 200);
+    
+    return () => clearTimeout(timer);
   }, []);
   
+  // Header animation
+  const headerAnimation = useSpring({
+    ref: headerSpringRef,
+    from: { opacity: 0, transform: 'translateY(-20px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(-20px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  // Search box animation
+  const searchAnimation = useSpring({
+    ref: searchSpringRef,
+    from: { opacity: 0, transform: 'translateY(-15px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(-15px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  // Schema list animation trail
+  const schemaTrail = useTrail(schemas.length, {
+    ref: schemasSpringRef,
+    from: { opacity: 0, transform: 'translateX(-20px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateX(0)' : 'translateX(-20px)' },
+    config: { mass: 1, tension: 280, friction: 60 }
+  });
+  
+  // Selected table details animation
+  const detailsAnimation = useSpring({
+    ref: detailsSpringRef,
+    from: { opacity: 0, transform: 'scale(0.95)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'scale(1)' : 'scale(0.95)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  // Columns table animation
+  const columnsAnimation = useSpring({
+    ref: columnsSpringRef,
+    from: { opacity: 0, transform: 'translateY(20px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(20px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  // Sample data animation
+  const sampleAnimation = useSpring({
+    ref: sampleSpringRef,
+    from: { opacity: 0, transform: 'translateY(20px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(20px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  // Insights animation
+  const insightsAnimation = useSpring({
+    ref: insightsSpringRef,
+    from: { opacity: 0, transform: 'translateY(20px)' },
+    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(20px)' },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  // Search results animation
+  const searchResultsAnimation = useSpring({
+    from: { opacity: 0, height: 0, transform: 'translateY(-10px)' },
+    to: { 
+      opacity: searchResults.length > 0 ? 1 : 0, 
+      height: searchResults.length > 0 ? 'auto' : 0,
+      transform: searchResults.length > 0 ? 'translateY(0)' : 'translateY(-10px)'
+    },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  // No selection state animation
+  const noSelectionAnimation = useSpring({
+    from: { opacity: 0, transform: 'scale(0.9)' },
+    to: { 
+      opacity: selectedTable ? 0 : (animationsVisible ? 1 : 0), 
+      transform: selectedTable ? 'scale(0.85)' : (animationsVisible ? 'scale(1)' : 'scale(0.9)')
+    },
+    config: { tension: 280, friction: 60 }
+  });
+  
+  // Chain the animations in sequence
+  useChain(
+    animationsVisible
+      ? [headerSpringRef, searchSpringRef, schemasSpringRef, detailsSpringRef, columnsSpringRef, sampleSpringRef, insightsSpringRef]
+      : [insightsSpringRef, sampleSpringRef, columnsSpringRef, detailsSpringRef, schemasSpringRef, searchSpringRef, headerSpringRef],
+    animationsVisible
+      ? [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+      : [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+  );
+  
   return (
-    <Card
+    <AnimatedCard
+      style={useSpring({
+        from: { opacity: 0, transform: 'translateY(30px)' },
+        to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(30px)' },
+        config: { tension: 280, friction: 60 }
+      })}
       sx={{
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
         borderRadius: { xs: 2, md: 3 },
-        boxShadow: 3,
+        boxShadow: '0 6px 20px rgba(0, 0, 0, 0.05)',
+        border: '1px solid rgba(0, 102, 179, 0.1)',
+        transition: 'box-shadow 0.3s ease',
+        '&:hover': {
+          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.08)',
+        },
+        overflow: 'hidden',
       }}
     >
       <CardContent sx={{ p: 0, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
-        <Box
+        <AnimatedBox
+          style={headerAnimation}
           sx={{
             p: { xs: 2, sm: 3 },
             borderBottom: '1px solid',
             borderColor: 'divider',
+            background: 'linear-gradient(180deg, rgba(0, 102, 179, 0.02) 0%, rgba(255, 255, 255, 0) 100%)',
           }}
         >
-          <HumanText variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
+          <AnimatedTypography 
+            component={HumanText}
+            variant="h6" 
+            style={{
+              background: 'linear-gradient(90deg, #0066B3 0%, #19B5FE 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundSize: '200% 100%',
+              backgroundPosition: 'right bottom',
+              ...useSpring({
+                from: { backgroundPosition: '0% 50%' },
+                to: { backgroundPosition: '100% 50%' },
+                config: { duration: 3000 },
+                loop: { reverse: true }
+              })
+            }}
+            sx={{ fontWeight: 600, mb: 0.5 }}
+          >
             SAP HANA Schema Explorer
-          </HumanText>
-          <HumanText variant="body2" color="text.secondary">
+          </AnimatedTypography>
+          <AnimatedTypography 
+            component={HumanText}
+            variant="body2"
+            style={useSpring({
+              from: { opacity: 0, transform: 'translateY(5px)' },
+              to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(5px)' },
+              delay: 100,
+              config: { tension: 280, friction: 60 }
+            })}
+            color="text.secondary"
+          >
             Explore schemas, tables, and data in your SAP HANA Cloud database
-          </HumanText>
-        </Box>
+          </AnimatedTypography>
+        </AnimatedBox>
         
         {/* Error message */}
         {error && (
-          <Box sx={{ p: 2 }}>
-            <Alert severity="error">{error}</Alert>
-          </Box>
+          <AnimatedBox 
+            style={useSpring({
+              from: { opacity: 0, transform: 'translateY(-10px)' },
+              to: { opacity: 1, transform: 'translateY(0)' },
+              config: { tension: 280, friction: 60 }
+            })}
+            sx={{ p: 2 }}
+          >
+            <AnimatedAlert 
+              severity="error"
+              style={useSpring({
+                from: { opacity: 0, transform: 'scale(0.95)' },
+                to: { opacity: 1, transform: 'scale(1)' },
+                config: { tension: 280, friction: 60 }
+              })}
+            >
+              {error}
+            </AnimatedAlert>
+          </AnimatedBox>
         )}
         
         {/* Main content */}
@@ -947,158 +1123,446 @@ const SchemaExplorer: React.FC<SchemaExplorerProps> = ({
             }}
           >
             {/* Search box */}
-            <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <TextField
+            <AnimatedBox 
+              style={searchAnimation}
+              sx={{ 
+                p: 2, 
+                borderBottom: '1px solid', 
+                borderColor: 'divider',
+                background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.4) 100%)',
+              }}
+            >
+              <AnimatedBox 
+                style={useSpring({
+                  from: { opacity: 0, transform: 'translateY(10px)' },
+                  to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(10px)' },
+                  delay: 150,
+                  config: { tension: 280, friction: 60 }
+                })}
+                sx={{ display: 'flex', gap: 1 }}
+              >
+                <AnimatedTextField
                   fullWidth
                   size="small"
                   placeholder="Search for tables..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyDown={handleSearchKeyDown}
+                  style={useSpring({
+                    from: { opacity: 0, transform: 'translateX(-10px)' },
+                    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateX(0)' : 'translateX(-10px)' },
+                    delay: 200,
+                    config: { tension: 280, friction: 60 }
+                  })}
                   InputProps={{
                     startAdornment: (
-                      <SearchIcon color="action" sx={{ mr: 1, opacity: 0.5 }} />
+                      <SearchIcon color="action" sx={{ 
+                        mr: 1, 
+                        opacity: 0.5,
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          opacity: 0.8,
+                          transform: 'scale(1.1)',
+                        }
+                      }} />
                     ),
+                    sx: {
+                      borderRadius: 2,
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        boxShadow: '0 2px 8px rgba(0, 102, 179, 0.1)',
+                      },
+                      '&:focus-within': {
+                        boxShadow: '0 2px 10px rgba(0, 102, 179, 0.15)',
+                      }
+                    }
                   }}
                 />
-                <Button
+                <AnimatedButton
                   variant="contained"
                   size="small"
                   onClick={searchTables}
                   disabled={isSearching || !searchTerm.trim()}
-                  sx={{ minWidth: 'auto', px: 2 }}
+                  style={useSpring({
+                    from: { opacity: 0, transform: 'translateX(10px)' },
+                    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateX(0)' : 'translateX(10px)' },
+                    delay: 250,
+                    config: { tension: 280, friction: 60 }
+                  })}
+                  sx={{ 
+                    minWidth: 'auto', 
+                    px: 2,
+                    borderRadius: 2,
+                    background: 'linear-gradient(90deg, #0066B3, #19B5FE)',
+                    boxShadow: '0 4px 10px rgba(0, 102, 179, 0.2)',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 6px 14px rgba(0, 102, 179, 0.3)',
+                    },
+                    '&:active': {
+                      transform: 'translateY(0px)',
+                    }
+                  }}
                 >
-                  {isSearching ? <CircularProgress size={24} /> : 'Search'}
-                </Button>
-              </Box>
+                  {isSearching ? <CircularProgress size={24} color="inherit" /> : 'Search'}
+                </AnimatedButton>
+              </AnimatedBox>
               
               {/* Search results */}
-              {searchResults.length > 0 && (
-                <Box sx={{ mt: 2 }}>
-                  <HumanText variant="subtitle2" sx={{ mb: 1 }}>
-                    Search Results:
-                  </HumanText>
-                  <List dense sx={{ bgcolor: alpha(theme.palette.primary.light, 0.1), borderRadius: 1 }}>
-                    {searchResults.map((result, index) => (
-                      <ListItem
-                        button
-                        key={index}
-                        onClick={() => handleTableSelect(result.schema, result.table)}
-                        selected={selectedTable?.schema === result.schema && selectedTable?.table === result.table}
-                      >
-                        <ListItemIcon sx={{ minWidth: 36 }}>
-                          <StorageIcon fontSize="small" color="primary" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={result.table}
-                          secondary={result.schema}
-                          primaryTypographyProps={{ variant: 'body2' }}
-                          secondaryTypographyProps={{ variant: 'caption' }}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Box>
-              )}
+              <AnimatedBox style={searchResultsAnimation}>
+                {searchResults.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <AnimatedTypography 
+                      component={HumanText} 
+                      variant="subtitle2" 
+                      sx={{ mb: 1 }}
+                      style={useSpring({
+                        from: { opacity: 0, transform: 'translateY(5px)' },
+                        to: { opacity: 1, transform: 'translateY(0)' },
+                        config: { tension: 280, friction: 60 }
+                      })}
+                    >
+                      Search Results:
+                    </AnimatedTypography>
+                    <List dense sx={{ 
+                      bgcolor: alpha(theme.palette.primary.light, 0.1), 
+                      borderRadius: 2,
+                      overflow: 'hidden',
+                      border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                      boxShadow: '0 4px 12px rgba(0, 102, 179, 0.05)'
+                    }}>
+                      {searchResults.map((result, index) => {
+                        const isSelected = selectedTable?.schema === result.schema && selectedTable?.table === result.table;
+                        
+                        return (
+                          <AnimatedListItem
+                            button
+                            key={index}
+                            onClick={() => handleTableSelect(result.schema, result.table)}
+                            selected={isSelected}
+                            style={useSpring({
+                              from: { opacity: 0, transform: 'translateY(10px)' },
+                              to: { opacity: 1, transform: 'translateY(0)' },
+                              delay: 50 * index,
+                              config: { tension: 280, friction: 60 }
+                            })}
+                            sx={{
+                              transition: 'all 0.3s ease',
+                              '&.Mui-selected': {
+                                backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                                '&:hover': {
+                                  backgroundColor: alpha(theme.palette.primary.main, 0.15),
+                                }
+                              },
+                              '&:hover': {
+                                backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                                transform: 'translateX(3px)'
+                              }
+                            }}
+                          >
+                            <ListItemIcon sx={{ 
+                              minWidth: 36,
+                              transition: 'transform 0.3s ease',
+                              transform: isSelected ? 'scale(1.2)' : 'scale(1)',
+                            }}>
+                              <StorageIcon 
+                                fontSize="small" 
+                                color={isSelected ? "primary" : "action"}
+                                sx={{
+                                  transition: 'all 0.3s ease',
+                                  filter: isSelected ? 'drop-shadow(0 2px 3px rgba(0, 102, 179, 0.3))' : 'none'
+                                }}
+                              />
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={<HumanText>{result.table}</HumanText>}
+                              secondary={<HumanText>{result.schema}</HumanText>}
+                              primaryTypographyProps={{ 
+                                variant: 'body2',
+                                sx: {
+                                  transition: 'all 0.3s ease',
+                                  fontWeight: isSelected ? 600 : 400,
+                                  color: isSelected ? theme.palette.primary.main : theme.palette.text.primary,
+                                }
+                              }}
+                              secondaryTypographyProps={{ variant: 'caption' }}
+                            />
+                          </AnimatedListItem>
+                        );
+                      })}
+                    </List>
+                  </Box>
+                )}
+              </AnimatedBox>
             </Box>
             
             {/* Schema list */}
-            <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+            <AnimatedBox 
+              style={useSpring({
+                from: { opacity: 0 },
+                to: { opacity: animationsVisible ? 1 : 0 },
+                delay: 300,
+                config: { tension: 280, friction: 60 }
+              })}
+              sx={{ flexGrow: 1, overflow: 'auto' }}
+            >
               {isLoadingSchemas ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                  <CircularProgress size={30} />
-                </Box>
+                <AnimatedBox 
+                  style={useSpring({
+                    from: { opacity: 0 },
+                    to: { opacity: 1 },
+                    config: { tension: 280, friction: 60 }
+                  })}
+                  sx={{ display: 'flex', justifyContent: 'center', p: 3 }}
+                >
+                  <CircularProgress 
+                    size={30} 
+                    sx={{
+                      color: theme.palette.primary.main,
+                      animation: 'pulse 1.5s ease-in-out infinite',
+                      '@keyframes pulse': {
+                        '0%': {
+                          opacity: 0.6,
+                          transform: 'scale(0.95)',
+                        },
+                        '50%': {
+                          opacity: 1,
+                          transform: 'scale(1.05)',
+                        },
+                        '100%': {
+                          opacity: 0.6,
+                          transform: 'scale(0.95)',
+                        },
+                      },
+                    }}
+                  />
+                </AnimatedBox>
               ) : (
                 <List sx={{ p: 0 }}>
-                  {schemas.map((schema) => (
-                    <React.Fragment key={schema.schema_name}>
-                      <ListItem
-                        button
-                        onClick={() => toggleSchema(schema.schema_name)}
-                        sx={{ px: 2 }}
-                      >
-                        <ListItemIcon>
-                          {expandedSchema === schema.schema_name ? (
-                            <FolderOpenIcon color="primary" />
+                  {schemaTrail.map((style, index) => {
+                    const schema = schemas[index];
+                    const isExpanded = expandedSchema === schema.schema_name;
+                    
+                    return (
+                      <React.Fragment key={schema.schema_name}>
+                        <AnimatedListItem
+                          button
+                          onClick={() => toggleSchema(schema.schema_name)}
+                          style={style}
+                          sx={{ 
+                            px: 2,
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                              backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                              transform: 'translateX(3px)'
+                            }
+                          }}
+                        >
+                          <ListItemIcon sx={{
+                            transition: 'transform 0.3s ease',
+                            transform: isExpanded ? 'scale(1.1)' : 'scale(1)',
+                          }}>
+                            {isExpanded ? (
+                              <FolderOpenIcon 
+                                color="primary" 
+                                sx={{
+                                  transition: 'all 0.3s ease',
+                                  filter: 'drop-shadow(0 2px 3px rgba(0, 102, 179, 0.3))'
+                                }}
+                              />
+                            ) : (
+                              <FolderIcon 
+                                color="primary"
+                                sx={{
+                                  transition: 'all 0.3s ease',
+                                  '&:hover': {
+                                    filter: 'drop-shadow(0 1px 2px rgba(0, 102, 179, 0.2))'
+                                  }
+                                }}
+                              />
+                            )}
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={<HumanText>{schema.schema_name}</HumanText>}
+                            secondary={<HumanText>{`${schema.table_count} tables, ${schema.view_count} views`}</HumanText>}
+                            primaryTypographyProps={{
+                              sx: {
+                                fontWeight: isExpanded ? 600 : 400,
+                                color: isExpanded ? theme.palette.primary.main : theme.palette.text.primary,
+                                transition: 'all 0.3s ease',
+                                ...(isExpanded && {
+                                  background: 'linear-gradient(90deg, #0066B3 0%, #19B5FE 100%)',
+                                  WebkitBackgroundClip: 'text',
+                                  WebkitTextFillColor: 'transparent',
+                                })
+                              }
+                            }}
+                          />
+                          <animated.div style={useSpring({
+                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                            config: { tension: 200, friction: 20 }
+                          })}>
+                            <ExpandMoreIcon sx={{ 
+                              color: isExpanded ? theme.palette.primary.main : theme.palette.text.secondary,
+                              transition: 'color 0.3s ease'
+                            }} />
+                          </animated.div>
+                        </AnimatedListItem>
+                        
+                        {/* Table list for the expanded schema */}
+                        <Collapse in={isExpanded} timeout="auto">
+                          {isLoadingTables && !tables[schema.schema_name] ? (
+                            <AnimatedBox 
+                              style={useSpring({
+                                from: { opacity: 0 },
+                                to: { opacity: 1 },
+                                config: { tension: 280, friction: 60 }
+                              })}
+                              sx={{ display: 'flex', justifyContent: 'center', p: 2 }}
+                            >
+                              <CircularProgress size={24} />
+                            </AnimatedBox>
                           ) : (
-                            <FolderIcon color="primary" />
+                            <List component="div" disablePadding>
+                              {tables[schema.schema_name]?.map((table, tableIndex) => {
+                                const isSelected = selectedTable?.schema === schema.schema_name && selectedTable?.table === table.table_name;
+                                
+                                return (
+                                  <AnimatedListItem
+                                    button
+                                    key={table.table_name}
+                                    style={useSpring({
+                                      from: { opacity: 0, transform: 'translateX(-20px)' },
+                                      to: { opacity: isExpanded ? 1 : 0, transform: isExpanded ? 'translateX(0)' : 'translateX(-20px)' },
+                                      delay: 30 * tableIndex,
+                                      config: { tension: 280, friction: 60 }
+                                    })}
+                                    sx={{ 
+                                      pl: 6,
+                                      transition: 'all 0.3s ease',
+                                      '&.Mui-selected': {
+                                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                                        '&:hover': {
+                                          backgroundColor: alpha(theme.palette.primary.main, 0.15),
+                                        }
+                                      },
+                                      '&:hover': {
+                                        backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                                        transform: 'translateX(5px)'
+                                      }
+                                    }}
+                                    selected={isSelected}
+                                    onClick={() => handleTableSelect(schema.schema_name, table.table_name)}
+                                  >
+                                    <ListItemIcon sx={{ 
+                                      minWidth: 36,
+                                      transition: 'transform 0.3s ease',
+                                      transform: isSelected ? 'scale(1.2)' : 'scale(1)',
+                                    }}>
+                                      <StorageIcon 
+                                        fontSize="small"
+                                        color={isSelected ? "primary" : "action"}
+                                        sx={{
+                                          transition: 'all 0.3s ease',
+                                          filter: isSelected ? 'drop-shadow(0 2px 3px rgba(0, 102, 179, 0.3))' : 'none'
+                                        }}
+                                      />
+                                    </ListItemIcon>
+                                    <ListItemText
+                                      primary={<HumanText>{table.table_name}</HumanText>}
+                                      secondary={<HumanText>{`${table.column_count} columns, ${table.row_count} rows`}</HumanText>}
+                                      primaryTypographyProps={{ 
+                                        variant: 'body2',
+                                        sx: {
+                                          transition: 'all 0.3s ease',
+                                          fontWeight: isSelected ? 600 : 400,
+                                          color: isSelected ? theme.palette.primary.main : theme.palette.text.primary,
+                                          ...(isSelected && {
+                                            textShadow: '0 0 1px rgba(0, 102, 179, 0.2)'
+                                          })
+                                        }
+                                      }}
+                                      secondaryTypographyProps={{ variant: 'caption' }}
+                                    />
+                                  </AnimatedListItem>
+                                );
+                              })}
+                            </List>
                           )}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={schema.schema_name}
-                          secondary={`${schema.table_count} tables, ${schema.view_count} views`}
-                        />
-                        {expandedSchema === schema.schema_name ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                      </ListItem>
-                      
-                      {/* Table list for the expanded schema */}
-                      <Collapse in={expandedSchema === schema.schema_name} timeout="auto">
-                        {isLoadingTables && !tables[schema.schema_name] ? (
-                          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-                            <CircularProgress size={24} />
-                          </Box>
-                        ) : (
-                          <List component="div" disablePadding>
-                            {tables[schema.schema_name]?.map((table) => (
-                              <ListItem
-                                button
-                                key={table.table_name}
-                                sx={{ pl: 6 }}
-                                selected={selectedTable?.schema === schema.schema_name && selectedTable?.table === table.table_name}
-                                onClick={() => handleTableSelect(schema.schema_name, table.table_name)}
-                              >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                  <StorageIcon fontSize="small" />
-                                </ListItemIcon>
-                                <ListItemText
-                                  primary={table.table_name}
-                                  secondary={`${table.column_count} columns, ${table.row_count} rows`}
-                                  primaryTypographyProps={{ variant: 'body2' }}
-                                  secondaryTypographyProps={{ variant: 'caption' }}
-                                />
-                              </ListItem>
-                            ))}
-                          </List>
-                        )}
-                      </Collapse>
-                    </React.Fragment>
-                  ))}
+                        </Collapse>
+                      </React.Fragment>
+                    );
+                  })}
                 </List>
               )}
-            </Box>
+            </AnimatedBox>
           </Box>
           
           {/* Right panel - Table details */}
-          <Box
+          <AnimatedBox
+            style={useSpring({
+              from: { opacity: 0 },
+              to: { opacity: animationsVisible ? 1 : 0 },
+              delay: 400,
+              config: { tension: 280, friction: 60 }
+            })}
             sx={{
               width: '65%',
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
+              borderLeft: '1px solid',
+              borderColor: 'divider',
             }}
           >
             {selectedTable ? (
               <>
                 {/* Table header */}
-                <Box
+                <AnimatedBox
+                  style={detailsAnimation}
                   sx={{
                     p: 2,
                     borderBottom: '1px solid',
                     borderColor: 'divider',
-                    bgcolor: alpha(theme.palette.primary.light, 0.05),
+                    background: 'linear-gradient(90deg, rgba(0, 102, 179, 0.05) 0%, rgba(255, 255, 255, 0) 100%)',
                   }}
                 >
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box>
-                      <HumanText variant="subtitle1" sx={{ fontWeight: 600 }}>
+                    <AnimatedBox 
+                      style={useSpring({
+                        from: { opacity: 0, transform: 'translateX(-10px)' },
+                        to: { opacity: 1, transform: 'translateX(0)' },
+                        config: { tension: 280, friction: 60 }
+                      })}
+                    >
+                      <AnimatedTypography 
+                        component={HumanText} 
+                        variant="subtitle1" 
+                        style={{
+                          background: 'linear-gradient(90deg, #0066B3 0%, #19B5FE 100%)',
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                        }}
+                        sx={{ fontWeight: 600 }}
+                      >
                         {selectedTable.table}
-                      </HumanText>
-                      <HumanText variant="body2" color="text.secondary">
+                      </AnimatedTypography>
+                      <AnimatedTypography 
+                        component={HumanText}
+                        variant="body2" 
+                        color="text.secondary"
+                        style={useSpring({
+                          from: { opacity: 0, transform: 'translateY(5px)' },
+                          to: { opacity: 1, transform: 'translateY(0)' },
+                          delay: 100,
+                          config: { tension: 280, friction: 60 }
+                        })}
+                      >
                         Schema: {selectedTable.schema}
-                      </HumanText>
-                    </Box>
-                    <Button
+                      </AnimatedTypography>
+                    </AnimatedBox>
+                    <AnimatedButton
                       variant="outlined"
                       size="small"
                       startIcon={<AutoAwesomeIcon />}
@@ -1107,49 +1571,188 @@ const SchemaExplorer: React.FC<SchemaExplorerProps> = ({
                           onTableSelect(selectedTable.schema, selectedTable.table);
                         }
                       }}
+                      style={useSpring({
+                        from: { opacity: 0, transform: 'translateX(10px)' },
+                        to: { opacity: 1, transform: 'translateX(0)' },
+                        delay: 200,
+                        config: { tension: 280, friction: 60 }
+                      })}
+                      sx={{ 
+                        borderRadius: 2,
+                        borderColor: theme.palette.primary.main,
+                        color: theme.palette.primary.main,
+                        position: 'relative',
+                        overflow: 'hidden',
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 4px 8px rgba(0, 102, 179, 0.2)',
+                          borderColor: theme.palette.primary.main,
+                          backgroundColor: alpha(theme.palette.primary.main, 0.04),
+                          '&::after': {
+                            opacity: 1,
+                            transform: 'translateX(100%)',
+                          }
+                        },
+                        '&::after': {
+                          content: '""',
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          background: `linear-gradient(90deg, transparent, ${alpha(theme.palette.primary.main, 0.2)}, transparent)`,
+                          opacity: 0,
+                          transform: 'translateX(-100%)',
+                          transition: 'transform 0.6s ease, opacity 0.6s ease',
+                        }
+                      }}
                     >
                       Vectorize This Table
-                    </Button>
+                    </AnimatedButton>
                   </Box>
-                </Box>
+                </AnimatedBox>
                 
                 {/* Table content */}
-                <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
+                <AnimatedBox 
+                  style={useSpring({
+                    from: { opacity: 0 },
+                    to: { opacity: 1 },
+                    delay: 300,
+                    config: { tension: 280, friction: 60 }
+                  })}
+                  sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}
+                >
                   {isLoadingColumns ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                      <CircularProgress size={30} />
-                    </Box>
+                    <AnimatedBox 
+                      style={useSpring({
+                        from: { opacity: 0 },
+                        to: { opacity: 1 },
+                        config: { tension: 280, friction: 60 }
+                      })}
+                      sx={{ display: 'flex', justifyContent: 'center', p: 3 }}
+                    >
+                      <CircularProgress 
+                        size={30} 
+                        sx={{
+                          color: theme.palette.primary.main,
+                          animation: 'pulse 1.5s ease-in-out infinite',
+                          '@keyframes pulse': {
+                            '0%': {
+                              opacity: 0.6,
+                              transform: 'scale(0.95)',
+                            },
+                            '50%': {
+                              opacity: 1,
+                              transform: 'scale(1.05)',
+                            },
+                            '100%': {
+                              opacity: 0.6,
+                              transform: 'scale(0.95)',
+                            },
+                          },
+                        }}
+                      />
+                    </AnimatedBox>
                   ) : (
                     <>
                       {/* Column information */}
-                      <HumanText variant="subtitle2" sx={{ mb: 1 }}>
+                      <AnimatedTypography 
+                        component={HumanText}
+                        variant="subtitle2" 
+                        sx={{ mb: 1 }}
+                        style={useSpring({
+                          from: { opacity: 0, transform: 'translateY(10px)' },
+                          to: { opacity: 1, transform: 'translateY(0)' },
+                          config: { tension: 280, friction: 60 }
+                        })}
+                      >
                         Columns
-                      </HumanText>
-                      <TableContainer component={Paper} sx={{ mb: 3, maxHeight: 200, overflow: 'auto' }}>
+                      </AnimatedTypography>
+                      <AnimatedTableContainer 
+                        component={AnimatedPaper} 
+                        style={columnsAnimation}
+                        sx={{ 
+                          mb: 3, 
+                          maxHeight: 200, 
+                          overflow: 'auto',
+                          borderRadius: 2,
+                          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+                          border: '1px solid rgba(0, 102, 179, 0.1)',
+                        }}
+                      >
                         <Table size="small" stickyHeader>
                           <TableHead>
                             <TableRow>
-                              <TableCell>Name</TableCell>
-                              <TableCell>Type</TableCell>
-                              <TableCell>Length</TableCell>
-                              <TableCell>Nullable</TableCell>
-                              <TableCell>Primary Key</TableCell>
+                              <TableCell sx={{ 
+                                fontWeight: 600,
+                                background: alpha(theme.palette.primary.main, 0.05),
+                              }}>Name</TableCell>
+                              <TableCell sx={{ 
+                                fontWeight: 600,
+                                background: alpha(theme.palette.primary.main, 0.05),
+                              }}>Type</TableCell>
+                              <TableCell sx={{ 
+                                fontWeight: 600,
+                                background: alpha(theme.palette.primary.main, 0.05),
+                              }}>Length</TableCell>
+                              <TableCell sx={{ 
+                                fontWeight: 600,
+                                background: alpha(theme.palette.primary.main, 0.05),
+                              }}>Nullable</TableCell>
+                              <TableCell sx={{ 
+                                fontWeight: 600,
+                                background: alpha(theme.palette.primary.main, 0.05),
+                              }}>Primary Key</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {columns.map((column) => (
-                              <TableRow key={column.column_name}>
-                                <TableCell>{column.column_name}</TableCell>
+                            {columns.map((column, index) => (
+                              <TableRow 
+                                key={column.column_name}
+                                sx={{ 
+                                  '&:nth-of-type(odd)': {
+                                    backgroundColor: alpha(theme.palette.action.hover, 0.05),
+                                  },
+                                  transition: 'background-color 0.3s ease',
+                                  '&:hover': {
+                                    backgroundColor: alpha(theme.palette.primary.main, 0.03),
+                                  },
+                                  // Animation for row entrance
+                                  animation: `fadeIn 0.5s ease forwards ${index * 0.05}s`,
+                                  opacity: 0,
+                                  '@keyframes fadeIn': {
+                                    from: { opacity: 0, transform: 'translateY(10px)' },
+                                    to: { opacity: 1, transform: 'translateY(0)' }
+                                  }
+                                }}
+                              >
+                                <TableCell sx={{ 
+                                  fontWeight: column.is_primary_key ? 600 : 400,
+                                  color: column.is_primary_key ? theme.palette.primary.main : 'inherit',
+                                }}>
+                                  {column.column_name}
+                                </TableCell>
                                 <TableCell>{column.data_type}</TableCell>
                                 <TableCell>{column.length}</TableCell>
                                 <TableCell>{column.nullable ? 'Yes' : 'No'}</TableCell>
                                 <TableCell>
                                   {column.is_primary_key && (
-                                    <Chip
+                                    <AnimatedChip
                                       label="PK"
                                       color="primary"
                                       size="small"
-                                      sx={{ height: 20, fontSize: '0.7rem' }}
+                                      style={useSpring({
+                                        from: { opacity: 0, transform: 'scale(0.8)' },
+                                        to: { opacity: 1, transform: 'scale(1)' },
+                                        delay: 100 + (index * 30),
+                                        config: { tension: 280, friction: 20 }
+                                      })}
+                                      sx={{ 
+                                        height: 20, 
+                                        fontSize: '0.7rem',
+                                        boxShadow: '0 2px 4px rgba(0, 102, 179, 0.2)',
+                                      }}
                                     />
                                   )}
                                 </TableCell>
@@ -1157,29 +1760,82 @@ const SchemaExplorer: React.FC<SchemaExplorerProps> = ({
                             ))}
                           </TableBody>
                         </Table>
-                      </TableContainer>
+                      </AnimatedTableContainer>
                       
                       {/* Sample data */}
-                      <HumanText variant="subtitle2" sx={{ mb: 1 }}>
+                      <AnimatedTypography 
+                        component={HumanText}
+                        variant="subtitle2" 
+                        sx={{ mb: 1 }}
+                        style={useSpring({
+                          from: { opacity: 0, transform: 'translateY(10px)' },
+                          to: { opacity: 1, transform: 'translateY(0)' },
+                          delay: 150,
+                          config: { tension: 280, friction: 60 }
+                        })}
+                      >
                         Sample Data
-                      </HumanText>
+                      </AnimatedTypography>
                       {isLoadingSample ? (
-                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                        <AnimatedBox 
+                          style={useSpring({
+                            from: { opacity: 0 },
+                            to: { opacity: 1 },
+                            config: { tension: 280, friction: 60 }
+                          })}
+                          sx={{ display: 'flex', justifyContent: 'center', p: 2 }}
+                        >
                           <CircularProgress size={24} />
-                        </Box>
+                        </AnimatedBox>
                       ) : tableSample ? (
-                        <TableContainer component={Paper} sx={{ maxHeight: 300, overflow: 'auto' }}>
+                        <AnimatedTableContainer 
+                          component={AnimatedPaper} 
+                          style={sampleAnimation}
+                          sx={{ 
+                            maxHeight: 300, 
+                            overflow: 'auto',
+                            borderRadius: 2,
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+                            border: '1px solid rgba(0, 102, 179, 0.1)',
+                          }}
+                        >
                           <Table size="small" stickyHeader>
                             <TableHead>
                               <TableRow>
                                 {tableSample.columns.map((column) => (
-                                  <TableCell key={column}>{column}</TableCell>
+                                  <TableCell 
+                                    key={column}
+                                    sx={{ 
+                                      fontWeight: 600,
+                                      background: alpha(theme.palette.primary.main, 0.05),
+                                    }}
+                                  >
+                                    {column}
+                                  </TableCell>
                                 ))}
                               </TableRow>
                             </TableHead>
                             <TableBody>
                               {tableSample.rows.map((row, rowIndex) => (
-                                <TableRow key={rowIndex}>
+                                <TableRow 
+                                  key={rowIndex}
+                                  sx={{ 
+                                    '&:nth-of-type(odd)': {
+                                      backgroundColor: alpha(theme.palette.action.hover, 0.05),
+                                    },
+                                    transition: 'background-color 0.3s ease',
+                                    '&:hover': {
+                                      backgroundColor: alpha(theme.palette.primary.main, 0.03),
+                                    },
+                                    // Animation for row entrance
+                                    animation: `fadeIn 0.5s ease forwards ${rowIndex * 0.05}s`,
+                                    opacity: 0,
+                                    '@keyframes fadeIn': {
+                                      from: { opacity: 0, transform: 'translateY(10px)' },
+                                      to: { opacity: 1, transform: 'translateY(0)' }
+                                    }
+                                  }}
+                                >
                                   {row.map((cell, cellIndex) => (
                                     <TableCell key={cellIndex}>{cell}</TableCell>
                                   ))}
@@ -1187,57 +1843,216 @@ const SchemaExplorer: React.FC<SchemaExplorerProps> = ({
                               ))}
                             </TableBody>
                           </Table>
-                        </TableContainer>
+                        </AnimatedTableContainer>
                       ) : (
-                        <Alert severity="info">No sample data available.</Alert>
+                        <AnimatedAlert 
+                          severity="info"
+                          style={useSpring({
+                            from: { opacity: 0, transform: 'translateY(10px)' },
+                            to: { opacity: 1, transform: 'translateY(0)' },
+                            config: { tension: 280, friction: 60 }
+                          })}
+                        >
+                          No sample data available.
+                        </AnimatedAlert>
                       )}
                       
                       {/* Data insights */}
-                      <Box sx={{ mt: 3 }}>
-                        <HumanText variant="subtitle2" sx={{ mb: 1 }}>
+                      <AnimatedBox 
+                        style={insightsAnimation}
+                        sx={{ mt: 3 }}
+                      >
+                        <AnimatedTypography 
+                          component={HumanText}
+                          variant="subtitle2" 
+                          sx={{ mb: 1 }}
+                          style={useSpring({
+                            from: { opacity: 0, transform: 'translateY(10px)' },
+                            to: { opacity: 1, transform: 'translateY(0)' },
+                            delay: 200,
+                            config: { tension: 280, friction: 60 }
+                          })}
+                        >
                           Data Insights
-                        </HumanText>
+                        </AnimatedTypography>
                         <Grid container spacing={2}>
                           <Grid item xs={12} md={6}>
-                            <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.success.light, 0.1) }}>
-                              <HumanText variant="subtitle2" color="success.main" sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
-                                <DataObjectIcon fontSize="small" sx={{ mr: 1 }} />
+                            <AnimatedPaper 
+                              style={useSpring({
+                                from: { opacity: 0, transform: 'translateY(20px)' },
+                                to: { opacity: 1, transform: 'translateY(0)' },
+                                delay: 250,
+                                config: { tension: 280, friction: 60 }
+                              })}
+                              sx={{ 
+                                p: 2, 
+                                bgcolor: alpha(theme.palette.success.light, 0.1),
+                                borderRadius: 2,
+                                border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
+                                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+                                transition: 'all 0.3s ease',
+                                '&:hover': {
+                                  boxShadow: '0 6px 16px rgba(0, 0, 0, 0.08)',
+                                  transform: 'translateY(-3px)',
+                                }
+                              }}
+                            >
+                              <AnimatedTypography 
+                                component={HumanText}
+                                variant="subtitle2" 
+                                color="success.main" 
+                                sx={{ 
+                                  mb: 1, 
+                                  display: 'flex', 
+                                  alignItems: 'center',
+                                  fontWeight: 600,
+                                }}
+                                style={useSpring({
+                                  from: { opacity: 0, transform: 'translateY(5px)' },
+                                  to: { opacity: 1, transform: 'translateY(0)' },
+                                  delay: 300,
+                                  config: { tension: 280, friction: 60 }
+                                })}
+                              >
+                                <DataObjectIcon 
+                                  fontSize="small" 
+                                  sx={{ 
+                                    mr: 1,
+                                    animation: 'pulse 2s ease-in-out infinite',
+                                    '@keyframes pulse': {
+                                      '0%': {
+                                        opacity: 0.8,
+                                        transform: 'scale(1)',
+                                      },
+                                      '50%': {
+                                        opacity: 1,
+                                        transform: 'scale(1.1)',
+                                      },
+                                      '100%': {
+                                        opacity: 0.8,
+                                        transform: 'scale(1)',
+                                      },
+                                    },
+                                  }} 
+                                />
                                 Column Characteristics
-                              </HumanText>
+                              </AnimatedTypography>
                               <List dense>
-                                <ListItem>
-                                  <ListItemText
-                                    primary="Text columns"
-                                    secondary={`${columns.filter(c => c.data_type.includes('CHAR') || c.data_type.includes('CLOB')).length} columns`}
-                                  />
-                                </ListItem>
-                                <ListItem>
-                                  <ListItemText
-                                    primary="Numeric columns"
-                                    secondary={`${columns.filter(c => c.data_type.includes('INT') || c.data_type.includes('DEC') || c.data_type.includes('NUM')).length} columns`}
-                                  />
-                                </ListItem>
-                                <ListItem>
-                                  <ListItemText
-                                    primary="Date/time columns"
-                                    secondary={`${columns.filter(c => c.data_type.includes('DATE') || c.data_type.includes('TIME')).length} columns`}
-                                  />
-                                </ListItem>
+                                {[
+                                  {
+                                    label: "Text columns",
+                                    value: `${columns.filter(c => c.data_type.includes('CHAR') || c.data_type.includes('CLOB')).length} columns`
+                                  },
+                                  {
+                                    label: "Numeric columns",
+                                    value: `${columns.filter(c => c.data_type.includes('INT') || c.data_type.includes('DEC') || c.data_type.includes('NUM')).length} columns`
+                                  },
+                                  {
+                                    label: "Date/time columns",
+                                    value: `${columns.filter(c => c.data_type.includes('DATE') || c.data_type.includes('TIME')).length} columns`
+                                  }
+                                ].map((item, index) => (
+                                  <AnimatedListItem
+                                    key={index}
+                                    style={useSpring({
+                                      from: { opacity: 0, transform: 'translateX(-10px)' },
+                                      to: { opacity: 1, transform: 'translateX(0)' },
+                                      delay: 350 + (index * 100),
+                                      config: { tension: 280, friction: 60 }
+                                    })}
+                                  >
+                                    <ListItemText
+                                      primary={<HumanText>{item.label}</HumanText>}
+                                      secondary={<HumanText>{item.value}</HumanText>}
+                                      primaryTypographyProps={{
+                                        sx: {
+                                          fontWeight: 500,
+                                          color: theme.palette.success.dark
+                                        }
+                                      }}
+                                    />
+                                  </AnimatedListItem>
+                                ))}
                               </List>
-                            </Paper>
+                            </AnimatedPaper>
                           </Grid>
                           <Grid item xs={12} md={6}>
-                            <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.info.light, 0.1) }}>
-                              <HumanText variant="subtitle2" color="info.main" sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
-                                <InfoIcon fontSize="small" sx={{ mr: 1 }} />
+                            <AnimatedPaper 
+                              style={useSpring({
+                                from: { opacity: 0, transform: 'translateY(20px)' },
+                                to: { opacity: 1, transform: 'translateY(0)' },
+                                delay: 300,
+                                config: { tension: 280, friction: 60 }
+                              })}
+                              sx={{ 
+                                p: 2, 
+                                bgcolor: alpha(theme.palette.info.light, 0.1),
+                                borderRadius: 2,
+                                border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`,
+                                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+                                transition: 'all 0.3s ease',
+                                '&:hover': {
+                                  boxShadow: '0 6px 16px rgba(0, 0, 0, 0.08)',
+                                  transform: 'translateY(-3px)',
+                                }
+                              }}
+                            >
+                              <AnimatedTypography 
+                                component={HumanText}
+                                variant="subtitle2" 
+                                color="info.main" 
+                                sx={{ 
+                                  mb: 1, 
+                                  display: 'flex', 
+                                  alignItems: 'center',
+                                  fontWeight: 600,
+                                }}
+                                style={useSpring({
+                                  from: { opacity: 0, transform: 'translateY(5px)' },
+                                  to: { opacity: 1, transform: 'translateY(0)' },
+                                  delay: 350,
+                                  config: { tension: 280, friction: 60 }
+                                })}
+                              >
+                                <InfoIcon 
+                                  fontSize="small" 
+                                  sx={{ 
+                                    mr: 1,
+                                    animation: 'pulse 2s ease-in-out infinite 0.5s',
+                                    '@keyframes pulse': {
+                                      '0%': {
+                                        opacity: 0.8,
+                                        transform: 'scale(1)',
+                                      },
+                                      '50%': {
+                                        opacity: 1,
+                                        transform: 'scale(1.1)',
+                                      },
+                                      '100%': {
+                                        opacity: 0.8,
+                                        transform: 'scale(1)',
+                                      },
+                                    },
+                                  }} 
+                                />
                                 Vectorization Potential
-                              </HumanText>
-                              <HumanText variant="body2" paragraph>
+                              </AnimatedTypography>
+                              <AnimatedTypography 
+                                component={HumanText}
+                                variant="body2" 
+                                paragraph
+                                style={useSpring({
+                                  from: { opacity: 0, transform: 'translateY(10px)' },
+                                  to: { opacity: 1, transform: 'translateY(0)' },
+                                  delay: 400,
+                                  config: { tension: 280, friction: 60 }
+                                })}
+                              >
                                 This table contains {columns.filter(c => c.data_type.includes('CHAR') || c.data_type.includes('CLOB')).length} text columns that can be vectorized for semantic search.
-                              </HumanText>
-                              <Button
+                              </AnimatedTypography>
+                              <AnimatedButton
                                 fullWidth
-                                variant="outlined"
+                                variant="contained"
                                 color="primary"
                                 startIcon={<AutoAwesomeIcon />}
                                 onClick={() => {
@@ -1245,19 +2060,55 @@ const SchemaExplorer: React.FC<SchemaExplorerProps> = ({
                                     onTableSelect(selectedTable.schema, selectedTable.table);
                                   }
                                 }}
+                                style={useSpring({
+                                  from: { opacity: 0, transform: 'translateY(10px)' },
+                                  to: { opacity: 1, transform: 'translateY(0)' },
+                                  delay: 450,
+                                  config: { tension: 280, friction: 60 }
+                                })}
+                                sx={{ 
+                                  borderRadius: 2,
+                                  background: 'linear-gradient(90deg, #0066B3, #19B5FE)',
+                                  boxShadow: '0 4px 10px rgba(0, 102, 179, 0.2)',
+                                  transition: 'all 0.3s ease',
+                                  '&:hover': {
+                                    transform: 'translateY(-2px)',
+                                    boxShadow: '0 6px 14px rgba(0, 102, 179, 0.3)',
+                                  },
+                                  '&:active': {
+                                    transform: 'translateY(0px)',
+                                  },
+                                  position: 'relative',
+                                  overflow: 'hidden',
+                                  '&::after': {
+                                    content: '""',
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '100%',
+                                    height: '100%',
+                                    background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent)',
+                                    transform: 'translateX(-100%)',
+                                  },
+                                  '&:hover::after': {
+                                    transform: 'translateX(100%)',
+                                    transition: 'transform 0.6s ease',
+                                  }
+                                }}
                               >
                                 Start Vectorization Process
-                              </Button>
-                            </Paper>
+                              </AnimatedButton>
+                            </AnimatedPaper>
                           </Grid>
                         </Grid>
-                      </Box>
+                      </AnimatedBox>
                     </>
                   )}
-                </Box>
+                </AnimatedBox>
               </>
             ) : (
-              <Box
+              <AnimatedBox
+                style={noSelectionAnimation}
                 sx={{
                   display: 'flex',
                   justifyContent: 'center',
@@ -1267,18 +2118,64 @@ const SchemaExplorer: React.FC<SchemaExplorerProps> = ({
                   p: 3,
                 }}
               >
-                <StorageIcon sx={{ fontSize: 60, color: alpha(theme.palette.primary.main, 0.2), mb: 2 }} />
-                <HumanText variant="h6" sx={{ mb: 1, textAlign: 'center' }}>
+                <animated.div style={useSpring({
+                  from: { opacity: 0, transform: 'scale(0.5) translateY(20px)' },
+                  to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'scale(1) translateY(0px)' : 'scale(0.5) translateY(20px)' },
+                  delay: 300,
+                  config: { tension: 280, friction: 20 }
+                })}>
+                  <StorageIcon sx={{ 
+                    fontSize: 80, 
+                    color: alpha(theme.palette.primary.main, 0.2), 
+                    mb: 2,
+                    filter: 'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1))',
+                    animation: 'float 3s ease-in-out infinite',
+                    '@keyframes float': {
+                      '0%': {
+                        transform: 'translateY(0px)',
+                      },
+                      '50%': {
+                        transform: 'translateY(-10px)',
+                      },
+                      '100%': {
+                        transform: 'translateY(0px)',
+                      },
+                    },
+                  }} />
+                </animated.div>
+                <AnimatedTypography 
+                  component={HumanText} 
+                  variant="h6" 
+                  style={{
+                    background: 'linear-gradient(90deg, #0066B3 0%, #19B5FE 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    ...useSpring({
+                      from: { opacity: 0, transform: 'translateY(20px)' },
+                      to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(20px)' },
+                      delay: 400,
+                      config: { tension: 280, friction: 60 }
+                    })
+                  }}
+                  sx={{ mb: 1, textAlign: 'center', fontWeight: 600 }}
+                >
                   Select a Table
-                </HumanText>
-                <HumanText
+                </AnimatedTypography>
+                <AnimatedTypography
+                  component={HumanText}
                   variant="body2"
                   color="text.secondary"
+                  style={useSpring({
+                    from: { opacity: 0, transform: 'translateY(20px)' },
+                    to: { opacity: animationsVisible ? 1 : 0, transform: animationsVisible ? 'translateY(0)' : 'translateY(20px)' },
+                    delay: 500,
+                    config: { tension: 280, friction: 60 }
+                  })}
                   sx={{ maxWidth: 400, textAlign: 'center' }}
                 >
                   Select a table from the schema browser to view its details and start the vectorization process.
-                </HumanText>
-              </Box>
+                </AnimatedTypography>
+              </AnimatedBox>
             )}
           </Box>
         </Box>
